@@ -5,6 +5,9 @@
 # Usage:
 #   kas build kas/lumen-orin-nx-16gb.yml
 #   kas build kas/lumen-orin-nano-8gb.yml
+#
+# Layer commits are pinned for reproducible builds.
+# To update layers: change the commit SHAs and re-test.
 
 header:
   version: 14
@@ -17,6 +20,7 @@ repos:
   poky:
     url: https://git.yoctoproject.org/poky
     branch: scarthgap
+    commit: d4576e3c081a7ee7b57d48421c4c4f491cb4defe
     layers:
       meta:
       meta-poky:
@@ -24,6 +28,7 @@ repos:
   meta-openembedded:
     url: https://github.com/openembedded/meta-openembedded
     branch: scarthgap
+    commit: d8cc4e44001c7257273d290ce8c4496e93d32841
     layers:
       meta-oe:
       meta-python:
@@ -32,6 +37,7 @@ repos:
   meta-tegra:
     url: https://github.com/OE4T/meta-tegra
     branch: scarthgap
+    commit: d2613418be82dd95733824a0839c185ec0e02f2d
     layers:
       .:
 
@@ -52,7 +58,7 @@ local_conf_header:
     # Accept NVIDIA binary licenses
     LICENSE_FLAGS_ACCEPTED = "commercial nvidia-tegra"
 
-    # Use systemd
+    # Use systemd (requires usrmerge in scarthgap)
     DISTRO_FEATURES:append = " systemd usrmerge"
     VIRTUAL-RUNTIME_init_manager = "systemd"
     VIRTUAL-RUNTIME_initscripts = "systemd-compat-units"
