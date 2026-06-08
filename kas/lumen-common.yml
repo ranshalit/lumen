@@ -9,7 +9,7 @@
 header:
   version: 14
 
-distro: tegra
+distro: poky
 
 target: lumen-image-minimal
 
