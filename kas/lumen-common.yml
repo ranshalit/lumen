@@ -33,12 +33,12 @@ repos:
     url: https://github.com/OE4T/meta-tegra
     branch: scarthgap
     layers:
-      meta-tegra:
+      .:
 
   meta-lumen:
     path: meta-lumen
     layers:
-      meta-lumen:
+      .:
 
 local_conf_header:
   standard: |
