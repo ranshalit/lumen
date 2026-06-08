@@ -2,6 +2,6 @@
 header:
   version: 14
   includes:
-    - lumen-common.yml
+    - kas/lumen-common.yml
 
 machine: lumen-orin-nano-4gb
