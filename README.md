@@ -107,15 +107,10 @@ lumen/
 └── scripts/bsp/              # original Aerium BSP reference script
 ```
 
-> **DTS patch note:** The patch files under `meta-lumen/recipes-bsp/device-tree/lumen-dtb-patches/patches/`
-> contain the intended changes but use placeholder context lines. Before the first build,
-> generate real patches against the L4T kernel source by running:
-> ```bash
-> # After kas fetches sources:
-> cd build/tmp/work-shared/<machine>/kernel-source
-> # Edit the DTS files, then:
-> git diff > ../../../../../meta-lumen/recipes-bsp/device-tree/lumen-dtb-patches/patches/0001-lumen-uart-enable-serial-3110000.patch
-> ```
+> **DTS patches:** Applied via `sed`/`awk` in `do_patch:append:lumen` inside
+> `meta-lumen/recipes-kernel/linux/linux-tegra_%.bbappend` — no patch context lines needed,
+> works out of the box. Reference `.patch` stubs (for documentation) are in
+> `meta-lumen/recipes-bsp/device-tree/lumen-dtb-patches/patches/docs/`.
 
 ---
 
@@ -207,18 +202,21 @@ Each file:
 ### 7. Write DTS patch infrastructure
 
 **`meta-lumen/recipes-kernel/linux/linux-tegra_%.bbappend`**
-- Uses `FILESEXTRAPATHS:prepend:lumen` to point at the patches directory
-- Appends all three patch files to `SRC_URI` only when `lumen` is in `MACHINEOVERRIDES`
 
-**Patch files** (in `recipes-bsp/device-tree/lumen-dtb-patches/patches/`):
-- `0001-lumen-uart-enable-serial-3110000.patch` — enables `serial@3110000`, switches
-  compatible to `nvidia,tegra194-hsuart`, adds `reset-names = "serial"`, fixes
-  `serial2`/`serial3` aliases
-- `0002-lumen-csi-port-index-serial-a.patch` — `port-index = <0x00>`, `tegra_sinterface = "serial_a"` in base DTB
-- `0003-lumen-camera-dtbo-csi-serial-a.patch` — same CSI fixes in camera DTBO overlay DTS files
+Uses `do_patch:append:lumen` to run `sed`/`awk` directly on the kernel DTS source
+files after they are fetched — mirroring the BSP script logic exactly, but without
+needing `.patch` context lines:
 
-> Patches carry the correct *intent* but placeholder context lines — they must be
-> regenerated against the real L4T kernel DTS source before the first build (see DTS patch note above).
+- Iterates over `arch/arm64/boot/dts/nvidia/tegra234-p3768-0000+p3767-*.dts`
+- **UART:** replaces compatible → `nvidia,tegra194-hsuart`, ensures `status = "okay"`,
+  adds `reset-names = "serial"`, fixes serial2/serial3 aliases
+- **CSI (base DTB):** `port-index = <0x00>`, `tegra_sinterface = "serial_a"`
+- Iterates over `*camera*.dts` overlays, applies the same CSI fix using the awk
+  script from the BSP (scoped to `i2c@0` block, VI port, channel endpoint)
+
+**Reference patch stubs** (`patches/docs/`) — kept as documentation showing the
+intended diff, to be regenerated as proper `git format-patch` output once the L4T
+kernel source is available locally.
 
 ### 8. Write BCT bbappend
 
