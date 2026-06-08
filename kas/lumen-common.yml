@@ -53,6 +53,6 @@ local_conf_header:
     LICENSE_FLAGS_ACCEPTED = "commercial nvidia-tegra"
 
     # Use systemd
-    DISTRO_FEATURES:append = " systemd"
+    DISTRO_FEATURES:append = " systemd usrmerge"
     VIRTUAL-RUNTIME_init_manager = "systemd"
     VIRTUAL-RUNTIME_initscripts = "systemd-compat-units"
