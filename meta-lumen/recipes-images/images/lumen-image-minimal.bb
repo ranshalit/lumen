@@ -1,4 +1,4 @@
-# meta-lumen/recipes-images/lumen-image-minimal.bb
+# meta-lumen/recipes-images/images/lumen-image-minimal.bb
 #
 # Minimal headless image for the Aerium Lumen board.
 # Produces a console-only rootfs suitable for flashing via L4T tegraflash.
@@ -11,18 +11,19 @@ COMPATIBLE_MACHINE = "(lumen)"
 
 inherit core-image
 
-# Base image features — no GUI
+# No GUI, no X11
 IMAGE_FEATURES += "ssh-server-openssh"
 
 IMAGE_INSTALL += " \
     packagegroup-core-boot \
-    packagegroup-base-tegra \
+    tegra-libraries-core \
+    tegra-nvsciipc \
     lumen-usb-otg \
     htop \
     i2c-tools \
     util-linux \
 "
 
-# rootfs size (1 GiB — adjust as needed)
-IMAGE_ROOTFS_SIZE ?= "1048576"
+# rootfs size: 2 GiB (override with IMAGE_ROOTFS_SIZE in local.conf if needed)
+IMAGE_ROOTFS_SIZE ?= "2097152"
 IMAGE_OVERHEAD_FACTOR ?= "1.2"
