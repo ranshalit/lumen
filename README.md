@@ -17,44 +17,119 @@ Product docs: https://docs.aerium.co.il/Product%20Manuals/Lumen
 
 ---
 
-## Prerequisites
+## Step-by-Step Build Guide
 
-- Ubuntu 22.04 host (native or VM)
-- **kas** build tool:
-  ```bash
-  pip3 install kas
-  ```
-- Yocto dependencies:
-  ```bash
-  sudo apt-get install -y gawk wget git diffstat unzip texinfo gcc build-essential \
-      chrpath socat cpio python3 python3-pip python3-pexpect xz-utils debianutils \
-      iputils-ping python3-git python3-jinja2 libegl1-mesa libsdl1.2-dev xterm \
-      python3-subunit mesa-common-dev zstd liblz4-tool file locales libacl1 \
-      dtc
-  ```
-- NVIDIA BSP binary license acceptance (prompted automatically during build)
+### Step 1 — Host requirements
 
----
+- Ubuntu 22.04 (native or VM)
+- At least ~120 GB free disk space
+- 8+ GB RAM recommended (16 GB for parallel builds)
 
-## Build
-
-Pick the module variant you are building for:
+### Step 2 — Install kas
 
 ```bash
-# Orin NX 16GB
+pip3 install kas
+```
+
+Verify:
+```bash
+kas --version   # should print 4.x or 5.x
+```
+
+### Step 3 — Install Yocto host dependencies
+
+```bash
+sudo apt-get install -y \
+    gawk wget git diffstat unzip texinfo gcc build-essential \
+    chrpath socat cpio python3 python3-pip python3-pexpect \
+    xz-utils debianutils iputils-ping python3-git python3-jinja2 \
+    libegl1-mesa libsdl1.2-dev xterm python3-subunit \
+    mesa-common-dev zstd liblz4-tool file locales libacl1 \
+    device-tree-compiler
+```
+
+### Step 4 — Clone this repository
+
+```bash
+git clone <this-repo-url> lumen
+cd lumen
+```
+
+### Step 5 — (Optional) Configure shared download/sstate cache
+
+If you have an existing Yocto downloads or sstate-cache directory, point to it
+to avoid re-downloading sources on subsequent builds:
+
+```bash
+# Example: export to override kas local_conf defaults
+export BB_ENV_PASSTHROUGH_ADDITIONS="DL_DIR SSTATE_DIR"
+export DL_DIR=/path/to/shared/downloads
+export SSTATE_DIR=/path/to/shared/sstate-cache
+```
+
+Or just let kas create `downloads/` and `sstate-cache/` next to the `build/` directory
+(default — no action needed).
+
+### Step 6 — Accept NVIDIA binary license
+
+During the first build, BitBake will stop and ask you to accept the NVIDIA binary
+license. To pre-accept it (non-interactive builds / CI), the kas common config already
+sets:
+
+```
+LICENSE_FLAGS_ACCEPTED = "commercial nvidia-tegra"
+```
+
+This is already in `kas/lumen-common.yml` — no action needed.
+
+### Step 7 — Build
+
+Pick the module variant you are building for and run:
+
+```bash
+# Orin NX 16GB  (p3767-0000)
 kas build kas/lumen-orin-nx-16gb.yml
 
-# Orin NX 8GB
+# Orin NX 8GB   (p3767-0001)
 kas build kas/lumen-orin-nx-8gb.yml
 
-# Orin Nano 8GB
+# Orin Nano 8GB (p3767-0003)
 kas build kas/lumen-orin-nano-8gb.yml
 
-# Orin Nano 4GB
+# Orin Nano 4GB (p3767-0004)
 kas build kas/lumen-orin-nano-4gb.yml
 ```
 
-Build outputs are in `build/tmp/deploy/images/<machine>/`.
+kas will:
+1. Clone poky, meta-openembedded, meta-tegra into `build/`
+2. Generate `build/conf/local.conf` and `build/conf/bblayers.conf`
+3. Run `bitbake lumen-image-minimal`
+
+Expected duration: **2–4 hours** on a 20-core machine (first build).
+Subsequent builds with a populated sstate-cache are much faster.
+
+Build outputs land in:
+```
+build/tmp/deploy/images/<machine>/
+```
+
+### Step 8 — Flash
+
+After a successful build:
+
+```bash
+cd build/tmp/deploy/images/lumen-orin-nx-16gb/
+tar -xf lumen-image-minimal-lumen-orin-nx-16gb.tegraflash.tar.gz
+cd <extracted-dir>
+sudo ./initrd-flash
+```
+
+For other variants replace `lumen-orin-nx-16gb` with the machine name.
+
+> **Note:** The Aerium BSP patches (UART, CSI, BCT, USB OTG) from
+> `scripts/bsp/Aerium-Lumen-BSP-Orin-NX-Nano.sh` are applied **automatically at
+> build time** by `meta-lumen`. Do **not** run the BSP script manually on the
+> `Linux_for_Tegra` directory — it is only kept as a reference.
 
 ---
 
