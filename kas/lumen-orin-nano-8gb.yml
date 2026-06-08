@@ -1,0 +1,7 @@
+# kas/lumen-orin-nano-8gb.yml — Jetson Orin Nano 8GB (p3767-0003) on Lumen carrier
+header:
+  version: 14
+  includes:
+    - lumen-common.yml
+
+machine: lumen-orin-nano-8gb

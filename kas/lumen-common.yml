@@ -1,0 +1,62 @@
+# kas/lumen-common.yml
+# Common layers and settings for all Lumen board variants.
+# Include this file from per-machine kas configs.
+#
+# Usage:
+#   kas build kas/lumen-orin-nx-16gb.yml
+#   kas build kas/lumen-orin-nano-8gb.yml
+
+header:
+  version: 14
+
+distro: tegra
+
+target: lumen-image-minimal
+
+repos:
+  poky:
+    url: https://git.yoctoproject.org/poky
+    branch: scarthgap
+    layers:
+      meta:
+      meta-poky:
+
+  meta-openembedded:
+    url: https://github.com/openembedded/meta-openembedded
+    branch: scarthgap
+    layers:
+      meta-oe:
+      meta-python:
+      meta-networking:
+
+  meta-tegra:
+    url: https://github.com/OE4T/meta-tegra
+    branch: scarthgap
+    layers:
+      meta-tegra:
+
+  meta-lumen:
+    path: meta-lumen
+    layers:
+      meta-lumen:
+
+local_conf_header:
+  standard: |
+    # Shared download and sstate-cache directories
+    DL_DIR ?= "${TOPDIR}/../downloads"
+    SSTATE_DIR ?= "${TOPDIR}/../sstate-cache"
+
+    # Image types: ext4 for rootfs + tegraflash tarball for flashing
+    IMAGE_FSTYPES = "ext4 tegraflash"
+
+    # Accept NVIDIA binary licenses
+    LICENSE_FLAGS_ACCEPTED = "commercial nvidia-tegra"
+
+    # Use systemd
+    DISTRO_FEATURES:append = " systemd"
+    VIRTUAL-RUNTIME_init_manager = "systemd"
+    VIRTUAL-RUNTIME_initscripts = "systemd-compat-units"
+
+    # Parallel build tuning — adjust to host CPU count
+    BB_NUMBER_THREADS ?= "$(nproc)"
+    PARALLEL_MAKE ?= "-j$(nproc)"

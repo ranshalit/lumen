@@ -1,0 +1,12 @@
+# Yocto build outputs
+build/
+downloads/
+sstate-cache/
+
+# kas generated files
+.kas-*
+
+# Editor
+.vscode/
+*.swp
+*~

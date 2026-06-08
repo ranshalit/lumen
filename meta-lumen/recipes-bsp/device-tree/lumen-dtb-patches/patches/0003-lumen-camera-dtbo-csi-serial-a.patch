@@ -1,0 +1,26 @@
+From: Aerium Lumen BSP <bsp@aerium.co.il>
+Date: Mon, 01 Jan 2024 00:00:00 +0000
+Subject: [PATCH 3/3] arm64: dts: nvidia: p3767: fix camera DTBO CSI serial_a
+
+Apply the same CSI port-index and tegra_sinterface corrections to the
+camera-specific DTBO overlay files so they are consistent with the base
+DTB patch (0002).
+
+The awk script in the BSP reference also handles the vi/channel endpoint
+port-index fix for the VI block; those are included here too.
+
+Derived from Aerium-Lumen-BSP-Orin-NX-Nano.sh (patch_camera_dtbo_overlays).
+
+NOTE: Camera overlay DTS files are typically under:
+        arch/arm64/boot/dts/nvidia/tegra234-p3768-0000+p3767-0000-camera-*.dts
+      Replace placeholder hunks with real content from L4T source:
+        scripts/bsp/Aerium-Lumen-BSP-Orin-NX-Nano.sh  (reference logic)
+
+--- a/arch/arm64/boot/dts/nvidia/tegra234-p3768-0000+p3767-0000-camera-imx477-rbpcv3.dts
++++ b/arch/arm64/boot/dts/nvidia/tegra234-p3768-0000+p3767-0000-camera-imx477-rbpcv3.dts
+@@ -1,0 +1,0 @@
+-			tegra_sinterface = "serial_b";
++			tegra_sinterface = "serial_a";
+@@ -1,0 +1,0 @@
+-			port-index = <0x01>;
++			port-index = <0x00>;

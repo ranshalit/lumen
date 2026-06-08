@@ -1,0 +1,15 @@
+[Unit]
+Description=Set USB2-0 OTG role to device mode (Aerium Lumen)
+Documentation=https://docs.aerium.co.il/Product%20Manuals/Lumen
+DefaultDependencies=no
+After=sysinit.target
+Before=network.target usb-gadget.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'echo "device" > /sys/class/usb_role/usb2-0-role-switch/role'
+ExecStop=/bin/sh -c 'echo "host" > /sys/class/usb_role/usb2-0-role-switch/role'
+
+[Install]
+WantedBy=multi-user.target

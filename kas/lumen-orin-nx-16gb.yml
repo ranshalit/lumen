@@ -1,0 +1,7 @@
+# kas/lumen-orin-nx-16gb.yml — Jetson Orin NX 16GB (p3767-0000) on Lumen carrier
+header:
+  version: 14
+  includes:
+    - lumen-common.yml
+
+machine: lumen-orin-nx-16gb

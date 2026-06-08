@@ -1,0 +1,7 @@
+# kas/lumen-orin-nano-4gb.yml — Jetson Orin Nano 4GB (p3767-0004) on Lumen carrier
+header:
+  version: 14
+  includes:
+    - lumen-common.yml
+
+machine: lumen-orin-nano-4gb

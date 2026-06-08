@@ -1,0 +1,27 @@
+From: Aerium Lumen BSP <bsp@aerium.co.il>
+Date: Mon, 01 Jan 2024 00:00:00 +0000
+Subject: [PATCH 2/3] arm64: dts: nvidia: p3767: fix CSI port-index and serial_a
+
+The Lumen carrier connects the MIPI CSI camera to port A (serial_a)
+on CSI index 0, not port B / index 1 as on the NVIDIA reference devkit.
+
+Changes:
+  - port-index: 0x01 -> 0x00
+  - tegra_sinterface: "serial_b" -> "serial_a"
+
+Applies to tegra234-p3768-0000+p3767-*.dts and camera DTBO overlays.
+
+Derived from Aerium-Lumen-BSP-Orin-NX-Nano.sh (CSI fix + camera DTBO section).
+
+NOTE: This patch must be applied against the L4T kernel source tree.
+      The exact context lines below are representative — replace with
+      real hunks once you have the L4T source:
+        scripts/bsp/Aerium-Lumen-BSP-Orin-NX-Nano.sh  (reference logic)
+
+--- a/arch/arm64/boot/dts/nvidia/tegra234-p3768-0000+p3767-0000.dts
++++ b/arch/arm64/boot/dts/nvidia/tegra234-p3768-0000+p3767-0000.dts
+@@ -1,0 +1,0 @@
+-			port-index = <0x01>;
+-			tegra_sinterface = "serial_b";
++			port-index = <0x00>;
++			tegra_sinterface = "serial_a";
