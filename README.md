@@ -17,7 +17,82 @@ Product docs: https://docs.aerium.co.il/Product%20Manuals/Lumen
 
 ---
 
-## Step-by-Step Build Guide
+## Build from Git (Reproducible)
+
+This repo contains everything needed to produce the exact same image on any Ubuntu 22.04 machine.
+All external layer versions are pinned by commit SHA in `kas/lumen-common.yml`.
+
+### 1. Prerequisites (one-time)
+
+**Ubuntu 22.04** (native or VM). Minimum ~120 GB free disk, 8 GB RAM.
+
+```bash
+# Install kas
+pip3 install kas
+
+# Install Yocto host dependencies
+sudo apt-get install -y \
+    gawk wget git diffstat unzip texinfo gcc build-essential \
+    chrpath socat cpio python3 python3-pip python3-pexpect \
+    xz-utils debianutils iputils-ping python3-git python3-jinja2 \
+    libegl1-mesa libsdl1.2-dev xterm python3-subunit \
+    mesa-common-dev zstd liblz4-tool file locales libacl1 \
+    device-tree-compiler
+```
+
+### 2. Clone and build
+
+```bash
+git clone <this-repo-url> lumen
+cd lumen
+
+# Pick your module variant:
+kas build kas/lumen-orin-nx-16gb.yml    # Orin NX 16GB  (p3767-0000)
+kas build kas/lumen-orin-nx-8gb.yml     # Orin NX 8GB   (p3767-0001)
+kas build kas/lumen-orin-nano-8gb.yml   # Orin Nano 8GB (p3767-0003)
+kas build kas/lumen-orin-nano-4gb.yml   # Orin Nano 4GB (p3767-0004)
+```
+
+kas will automatically:
+- Clone **poky**, **meta-openembedded**, **meta-tegra** at the pinned commits
+- Generate `build/conf/local.conf` and `build/conf/bblayers.conf`
+- Run `bitbake lumen-image-minimal`
+
+Expected build time: **2–4 hours** on a 20-core machine.
+
+### 3. Output
+
+```
+build/tmp/deploy/images/<machine>/
+├── lumen-image-minimal-<machine>.ext4          # rootfs
+└── lumen-image-minimal-<machine>.tegraflash.tar.gz  # flash package
+```
+
+### 4. Flash
+
+```bash
+cd build/tmp/deploy/images/lumen-orin-nx-16gb/
+tar -xf lumen-image-minimal-lumen-orin-nx-16gb.tegraflash.tar.gz
+cd <extracted-dir>
+sudo ./initrd-flash
+```
+
+> The Aerium BSP patches (UART, CSI, BCT, USB OTG) are applied automatically
+> at build time. Do **not** run `scripts/bsp/Aerium-Lumen-BSP-Orin-NX-Nano.sh` manually.
+
+### Pinned layer versions
+
+| Layer | Commit | Branch |
+|---|---|---|
+| poky | `d4576e3c` | scarthgap (Yocto 5.0 LTS) |
+| meta-openembedded | `d8cc4e44` | scarthgap |
+| meta-tegra (OE4T) | `d2613418` | scarthgap (L4T 36.5.0 / JetPack 6.x) |
+
+To update layers: change the commit SHAs in `kas/lumen-common.yml` and re-test.
+
+---
+
+## Detailed Build Reference
 
 ### Step 1 — Host requirements
 
