@@ -10,3 +10,9 @@ sstate-cache/
 .vscode/
 *.swp
 *~
+
+# kas-cloned layers (local build only, not committed)
+poky/
+meta-openembedded/
+meta-tegra/
+build/
