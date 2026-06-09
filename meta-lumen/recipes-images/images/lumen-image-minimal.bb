@@ -19,10 +19,34 @@ IMAGE_INSTALL += " \
     tegra-libraries-core \
     tegra-nvsciipc \
     lumen-usb-otg \
+    sudo \
     htop \
     i2c-tools \
     util-linux \
 "
+
+# Post-install script to create nexus user and configure sudo
+rootfs_postinstall_lumen() {
+    # Create nexus user with pre-computed password hash: Pp12345678
+    echo 'nexus:$1$zqutX3PP$7yMwtINW/p.UC/W/qYHvF0:19000:0:99999:7:::' >> ${IMAGE_ROOTFS}/etc/shadow
+    echo 'nexus:x:1000:1000:Nexus User:/home/nexus:/bin/bash' >> ${IMAGE_ROOTFS}/etc/passwd
+    echo 'nexus:x:1000:' >> ${IMAGE_ROOTFS}/etc/group
+    
+    # Create home directory
+    mkdir -p ${IMAGE_ROOTFS}/home/nexus
+    chown -R 1000:1000 ${IMAGE_ROOTFS}/home/nexus
+    chmod 755 ${IMAGE_ROOTFS}/home/nexus
+    
+    # Add nexus to sudo group
+    sed -i 's/^%sudo/%sudo_members/' ${IMAGE_ROOTFS}/etc/group 2>/dev/null || true
+    echo 'sudo:x:27:nexus' >> ${IMAGE_ROOTFS}/etc/group
+    
+    # Ensure sudoers is configured
+    echo 'nexus ALL=(ALL) NOPASSWD: ALL' >> ${IMAGE_ROOTFS}/etc/sudoers.d/nexus
+    chmod 440 ${IMAGE_ROOTFS}/etc/sudoers.d/nexus
+}
+
+ROOTFS_POSTINSTALL_COMMAND:append:lumen = "rootfs_postinstall_lumen; "
 
 # rootfs size: 2 GiB (override with IMAGE_ROOTFS_SIZE in local.conf if needed)
 IMAGE_ROOTFS_SIZE ?= "2097152"
