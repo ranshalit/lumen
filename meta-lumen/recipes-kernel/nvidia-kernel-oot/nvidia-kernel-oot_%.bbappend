@@ -37,11 +37,11 @@ do_compile:append:lumen() {
 
         if grep -q 'serial@3110000' "$dts" && \
            ! awk '/serial@3110000 \{/,/\};/' "$dts" | grep -q 'status ='; then
-            sed -i '/serial@3110000 {/,/\};/ { /\};/ i\\t\tstatus = "okay"; }' "$dts"
+            awk '/serial@3110000 \{/{found=1} found && /\};/{print "\t\tstatus = \"okay\";"; found=0} {print}' "$dts" > "${dts}.tmp" && mv "${dts}.tmp" "$dts"
         fi
         if grep -q 'serial@3110000' "$dts" && \
            ! awk '/serial@3110000 \{/,/\};/' "$dts" | grep -q 'reset-names'; then
-            sed -i '/serial@3110000 {/,/\};/ { /\};/ i\\t\treset-names = "serial"; }' "$dts"
+            awk '/serial@3110000 \{/{found=1} found && /\};/{print "\t\treset-names = \"serial\";"; found=0} {print}' "$dts" > "${dts}.tmp" && mv "${dts}.tmp" "$dts"
         fi
 
         # B — Serial aliases: serial2=ttyTHS0, serial3=ttyTHS1
