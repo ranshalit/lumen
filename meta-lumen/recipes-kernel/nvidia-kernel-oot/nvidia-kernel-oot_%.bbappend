@@ -69,6 +69,23 @@ do_compile:append:lumen() {
         else
             bbwarn "lumen: could not disable pcie@141e0000 in ${base}.dtb (node may not exist)"
         fi
+
+        # E — Unused peripherals: audio fabric, HDA, and SPI controllers (no hardware on Lumen)
+        # aconnect@2900000: APB audio fabric — no audio hardware on Lumen
+        # hda@3510000: Intel HDA controller — no audio hardware; kernel HDA drivers already
+        #              stripped (strip-phase2-bt-audio.cfg).  Disabling here avoids a
+        #              "deferred probe" log line and the HDA controller power-on sequence.
+        # spi@3210000/3230000: SPI-A/B — no SPI devices on Lumen carrier
+        # NOTE: spi@3270000 (QSPI0 boot flash, nvidia,tegra234-qspi) must remain enabled
+        #       — disabling it removes /dev/mtd0 and breaks initrd-flash QSPI flashing.
+        # Kept: rce-fabric (camera in use), actmon/hwpm/mc-hwpm (tegrastats/Nsight).
+        for node in aconnect@2900000 hda@3510000 spi@3210000 spi@3230000; do
+            if fdtput -t s "$dtb" "/bus@0/${node}" status disabled 2>/dev/null; then
+                bbdebug 1 "lumen: disabled ${node} in ${base}.dtb"
+            else
+                bbwarn "lumen: could not disable ${node} in ${base}.dtb (node may not exist)"
+            fi
+        done
     done
 
     # ------------------------------------------------------------------ #
