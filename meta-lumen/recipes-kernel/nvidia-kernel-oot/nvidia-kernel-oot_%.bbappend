@@ -58,6 +58,17 @@ do_compile:append:lumen() {
             bberror "lumen: dtc recompile failed for ${base}, restoring original"
         fi
         rm -f "$dts"
+
+        # D — PCIe: disable empty slot pcie@141e0000 (C7, M.2 M Key secondary)
+        # Confirmed empty from boot log: bus probed then immediately released,
+        # no device enumerated. Disabling saves kernel probe time at boot.
+        # Kept: 140a0000 (Realtek r8168 Ethernet), 14160000 (NVMe SSD),
+        #        14100000 (Microchip 1055:7430, purpose unknown — kept safe).
+        if fdtput -t s "$dtb" "/bus@0/pcie@141e0000" status disabled 2>/dev/null; then
+            bbdebug 1 "lumen: disabled pcie@141e0000 in ${base}.dtb"
+        else
+            bbwarn "lumen: could not disable pcie@141e0000 in ${base}.dtb (node may not exist)"
+        fi
     done
 
     # ------------------------------------------------------------------ #
