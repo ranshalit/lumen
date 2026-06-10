@@ -39,3 +39,8 @@ VIRTUAL-RUNTIME_base-utils-syslog = ""
 # Skip the extlinux boot menu countdown — always auto-boot the first entry.
 # The menu is never used on Lumen; recovery is via reflash (flash-lumen workflow).
 UBOOT_EXTLINUX_TIMEOUT = "0"
+
+# MB1/BPMP serial logging: silence pre-kernel bootloader output.
+# Serial console is only used post-kernel on Lumen; MB1/BPMP debug not needed.
+TEGRA_MB1_LOG_LEVEL = "0"
+TEGRA_BPMP_SERIAL_LOGGING = "0"
