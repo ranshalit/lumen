@@ -44,3 +44,7 @@ UBOOT_EXTLINUX_TIMEOUT = "0"
 # Serial console is only used post-kernel on Lumen; MB1/BPMP debug not needed.
 TEGRA_MB1_LOG_LEVEL = "0"
 TEGRA_BPMP_SERIAL_LOGGING = "0"
+
+# Suppress kernel log output on serial during boot (saves time at 115200 baud).
+# dmesg is available post-boot for diagnostics.
+KERNEL_ARGS:append = " quiet loglevel=0 audit=0"
