@@ -27,10 +27,11 @@ DISTRO_FEATURES:remove = " \
     ipv6 \
 "
 
-# Keep: acl xattr opengl vulkan alsa ext2 ipv4 usbgadget usbhost seccomp
+# Keep: acl xattr opengl vulkan ext2 ipv4 usbgadget usbhost seccomp
+
+# Remove alsa from MACHINE_FEATURES — no audio hardware on Lumen.
+# tegra-common.inc adds it, but packagegroup-base-alsa → alsa-state is unwanted.
+MACHINE_FEATURES:remove = "alsa"
 
 # syslog: removable — dmesg ring buffer is accessible live via `dmesg`
 VIRTUAL-RUNTIME_base-utils-syslog = ""
-
-# alsa-state: no audio hardware in use on Lumen
-BAD_RECOMMENDATIONS:append = " alsa-state alsa-states"
