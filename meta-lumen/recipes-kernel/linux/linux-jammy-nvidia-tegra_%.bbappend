@@ -1,6 +1,14 @@
 # meta-lumen/recipes-kernel/linux/linux-jammy-nvidia-tegra_%.bbappend
 #
-# Placeholder for Lumen-specific kernel config fragments if needed.
+# Lumen-specific kernel config fragments.
 # DTS/DTB patches are applied in nvidia-kernel-oot_%.bbappend because
 # in JetPack 6.x (L4T 36.x) device trees are built out-of-tree by
 # the nvidia-kernel-oot recipe.
+#
+# Module-stripping fragments (all machines, applied in phase order):
+#   Phase 1 — IPv6, WiFi stack, CAN, tunnels, netfilter modules, BTRFS, BCM Ethernet
+#
+# To roll back a phase: git revert <phase-commit> && bitbake linux-jammy-nvidia-tegra
+SRC_URI:append:lumen = " \
+    file://strip-phase1-net.cfg \
+    "
