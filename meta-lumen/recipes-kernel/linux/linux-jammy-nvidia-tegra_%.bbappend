@@ -17,4 +17,5 @@ SRC_URI:append:lumen = " \
     file://strip-phase1-net.cfg \
     file://strip-phase2-bt-audio.cfg \
     file://strip-phase3-display-misc.cfg \
+    file://no-initrd.cfg \
     "

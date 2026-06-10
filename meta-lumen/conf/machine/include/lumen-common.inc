@@ -40,6 +40,12 @@ VIRTUAL-RUNTIME_base-utils-syslog = ""
 # The menu is never used on Lumen; recovery is via reflash (flash-lumen workflow).
 UBOOT_EXTLINUX_TIMEOUT = "0"
 
+# Eliminate the boot initramfs — NVMe + PCIe are built into the kernel (no-initrd.cfg).
+# Rootfs is always on nvme0n1p1 (APP partition id=1; A/B redundancy is kernel-only).
+INITRAMFS_IMAGE = ""
+INITRAMFS_IMAGE_BUNDLE = "0"
+KERNEL_ARGS:append = " root=/dev/nvme0n1p1 rootwait rw"
+
 # MB1/BPMP serial logging: silence pre-kernel bootloader output.
 # Serial console is only used post-kernel on Lumen; MB1/BPMP debug not needed.
 TEGRA_MB1_LOG_LEVEL = "0"
