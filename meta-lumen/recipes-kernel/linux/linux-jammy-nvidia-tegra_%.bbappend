@@ -9,6 +9,8 @@
 #   Phase 1 — IPv6, WiFi stack, CAN, tunnels, netfilter modules, BTRFS, BCM Ethernet
 #   Phase 2 — Bluetooth transport drivers, all audio codec/platform modules (~110 modules)
 #   Phase 3 — Display DRM (Nouveau, Tegra DC, encoders), misc SoC SPI controllers
+#   Phase 4 — FTRACE/function tracer, SLUB_DEBUG, DEBUG_KERNEL (production hardening)
+#   Phase 5 — FUSE/VFAT/NTFS converted to modules (not needed at early boot)
 #
 # To roll back a phase: git revert <phase-commit> && bitbake linux-jammy-nvidia-tegra
 FILESEXTRAPATHS:prepend:lumen := "${THISDIR}/linux-jammy-nvidia-tegra:"
@@ -18,4 +20,5 @@ SRC_URI:append:lumen = " \
     file://strip-phase2-bt-audio.cfg \
     file://strip-phase3-display-misc.cfg \
     file://no-initrd.cfg \
+    file://strip-phase4-debug.cfg \
     "
