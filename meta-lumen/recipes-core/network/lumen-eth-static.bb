@@ -1,8 +1,9 @@
 # Configure persistent static IP on the Lumen wired Ethernet interface
 # via ifupdown (/etc/network/interfaces).
-# eth0 is brought up asynchronously at boot to avoid blocking the init sequence.
+# eth0 is brought up via an inittab `once` entry after the login prompt,
+# so it never blocks the boot path. lo is handled automatically by the kernel.
 
-SUMMARY = "Configure static Ethernet IP via ifupdown (async)"
+SUMMARY = "Configure static Ethernet IP via ifupdown (post-prompt)"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
@@ -17,11 +18,6 @@ RPROVIDES:${PN} += "init-ifupdown"
 SRC_URI = "file://interfaces file://lumen-eth-static"
 
 S = "${WORKDIR}"
-
-inherit update-rc.d
-
-INITSCRIPT_NAME = "lumen-eth-static"
-INITSCRIPT_PARAMS = "start 40 S ."
 
 do_configure[noexec] = "1"
 do_compile[noexec] = "1"

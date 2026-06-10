@@ -1,19 +1,20 @@
 #!/bin/sh
 ### BEGIN INIT INFO
 # Provides:          lumen-eth-static
-# Required-Start:    $local_fs
+# Required-Start:
 # Required-Stop:
-# Default-Start:     S
+# Default-Start:
 # Default-Stop:
-# Short-Description: Configure static IP on eth0 (non-blocking)
+# Short-Description: Configure static IP on eth0 (post-prompt, non-blocking)
 ### END INIT INFO
+#
+# Triggered via inittab `once` entry after getty spawns — runs concurrently
+# with the login prompt so it never delays the boot path.
+# lo (loopback) is handled automatically by the kernel; no ifup lo needed.
 
 case "$1" in
     start)
-        # Bring up loopback synchronously (needed before login prompt)
-        ifup lo 2>/dev/null || true
-
-        # Bring up eth0 in the background — waits for link without blocking boot
+        # Wait for eth0 link then bring it up — fully non-blocking from boot's POV
         (
             i=0
             while [ $i -lt 30 ] && \
@@ -26,7 +27,6 @@ case "$1" in
         ;;
     stop)
         ifdown eth0 2>/dev/null || true
-        ifdown lo 2>/dev/null || true
         ;;
     *)
         echo "Usage: $0 {start|stop}"

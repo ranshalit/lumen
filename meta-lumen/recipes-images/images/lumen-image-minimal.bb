@@ -18,7 +18,6 @@ IMAGE_INSTALL += " \
     packagegroup-core-boot \
     tegra-libraries-core \
     tegra-nvsciipc \
-    lumen-usb-otg \
     lumen-eth-static \
     ifupdown \
     sudo \
