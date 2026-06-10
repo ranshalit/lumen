@@ -6,8 +6,6 @@
 # Without this, the port defaults to host mode and enumeration fails.
 #
 # Derived from: scripts/bsp/Aerium-Lumen-BSP-Orin-NX-Nano.sh (fix_usb_otg)
-# Replaces the BSP's sed patch on nv-l4t-usb-device-mode-start.sh with a
-# clean systemd oneshot service.
 
 SUMMARY = "Set USB2-0 OTG role to device mode on boot"
 LICENSE = "MIT"
@@ -16,23 +14,23 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda
 COMPATIBLE_MACHINE = "(lumen)"
 
 SRC_URI = " \
-    file://lumen-usb-otg.service \
+    file://lumen-usb-otg \
 "
 
 S = "${WORKDIR}"
 
-inherit systemd
+inherit update-rc.d
 
-SYSTEMD_SERVICE:${PN} = "lumen-usb-otg.service"
-SYSTEMD_AUTO_ENABLE = "enable"
+INITSCRIPT_NAME = "lumen-usb-otg"
+INITSCRIPT_PARAMS = "start 05 S ."
 
 do_configure[noexec] = "1"
 do_compile[noexec] = "1"
 
 do_install() {
-    install -d ${D}${systemd_system_unitdir}
-    install -m 0644 ${WORKDIR}/lumen-usb-otg.service \
-        ${D}${systemd_system_unitdir}/lumen-usb-otg.service
+    install -d ${D}${sysconfdir}/init.d
+    install -m 0755 ${WORKDIR}/lumen-usb-otg \
+        ${D}${sysconfdir}/init.d/lumen-usb-otg
 }
 
-FILES:${PN} += "${systemd_system_unitdir}/lumen-usb-otg.service"
+FILES:${PN} += "${sysconfdir}/init.d/lumen-usb-otg"

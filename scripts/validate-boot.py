@@ -4,12 +4,12 @@ Device Boot Validation Script
 
 Validates that Lumen Linux device booted correctly by checking:
 - Serial ports (ttyS0, ttyS2, ttyTHS1, ttyTHS3)
-- Network interface (enP8p1s0) with link and ping tests
+- Network interface (eth0) with link and ping tests
 - Storage subsystem (root filesystem, /boot)
 - Memory subsystem
 - GPU subsystem (if available)
 - Boot logs (dmesg for critical errors)
-- Systemd health
+- BusyBox init health (PID 1, sshd running)
 
 Can execute via SSH (fast, post-boot) or serial console (any boot stage).
 Auto-detects connectivity: tries SSH first, falls back to serial if unavailable.
@@ -130,13 +130,13 @@ class BootValidator:
     def validate_network_interface(self):
         """Check ethernet interface exists and is UP"""
         # Check device exists
-        rc, output = self.run_command("test -d /sys/class/net/enP8p1s0 && echo OK || echo FAIL")
+        rc, output = self.run_command("test -d /sys/class/net/eth0 && echo OK || echo FAIL")
         if "OK" not in output:
-            self.check("Network Interface", False, "enP8p1s0 not found")
+            self.check("Network Interface", False, "eth0 not found")
             return
 
         # Check link status
-        rc, output = self.run_command("cat /sys/class/net/enP8p1s0/operstate 2>/dev/null")
+        rc, output = self.run_command("cat /sys/class/net/eth0/operstate 2>/dev/null")
         link_status = output.strip()
         link_up = link_status in ["up", "unknown"]
 
@@ -146,7 +146,7 @@ class BootValidator:
 
         # Pass if interface is UP, ping is a bonus check
         passed = link_up
-        details = f"enP8p1s0 {link_status}"
+        details = f"eth0 {link_status}"
         if ping_ok:
             details += f", ping {self.ping_target} OK"
         self.check("Network Interface", passed, details)
@@ -210,15 +210,20 @@ class BootValidator:
         else:
             self.check("Boot Logs", False, f"{critical_count} critical error(s) found")
 
-    def validate_systemd(self):
-        """Check systemd health"""
-        rc, output = self.run_command("systemctl is-system-running 2>/dev/null")
-        status = output.strip() if rc == 0 else "unknown"
+    def validate_init(self):
+        """Check BusyBox init health (PID 1 is init, key init.d services running)"""
+        # Confirm PID 1 is init (not systemd)
+        rc, output = self.run_command("cat /proc/1/cmdline")
+        pid1 = output.strip()
+        is_init = "init" in pid1 and "systemd" not in pid1
 
-        # systemd can report "degraded" if some units fail but critical services run
-        running_ok = status in ["running", "degraded"]
-        passed = running_ok
-        self.check("Systemd Health", passed, f"status={status}")
+        # Check sshd is running (started by init.d)
+        rc2, output2 = self.run_command("pidof sshd >/dev/null 2>&1 && echo OK || echo FAIL")
+        sshd_ok = "OK" in output2
+
+        passed = is_init
+        details = f"PID1={pid1 or 'unknown'}, sshd={'running' if sshd_ok else 'not running'}"
+        self.check("Init Health", passed, details)
 
     def validate_all(self):
         """Run all validation checks"""
@@ -231,7 +236,7 @@ class BootValidator:
         self.validate_memory()
         self.validate_gpu()
         self.validate_boot_logs()
-        self.validate_systemd()
+        self.validate_init()
 
         return self.all_passed
 

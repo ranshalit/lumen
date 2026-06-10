@@ -58,7 +58,9 @@ local_conf_header:
     # Accept NVIDIA binary licenses
     LICENSE_FLAGS_ACCEPTED = "commercial nvidia-tegra"
 
-    # Use systemd (requires usrmerge in scarthgap)
-    DISTRO_FEATURES:append = " systemd usrmerge"
-    VIRTUAL-RUNTIME_init_manager = "systemd"
-    VIRTUAL-RUNTIME_initscripts = "systemd-compat-units"
+    # Use BusyBox init (sysvinit-compatible, no systemd)
+    VIRTUAL-RUNTIME_init_manager = "sysvinit"
+    VIRTUAL-RUNTIME_initscripts = "initscripts"
+
+    # Disable SPDX generation (avoid packagegroup SPDX race condition)
+    INHERIT:remove = "create-spdx"
