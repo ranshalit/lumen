@@ -11,6 +11,9 @@ COMPATIBLE_MACHINE = "(lumen)"
 
 inherit core-image
 
+# Pull in native ssh-keygen for host-side key pre-generation
+do_rootfs[depends] += "openssh-native:do_populate_sysroot"
+
 # No GUI, no X11
 IMAGE_FEATURES += "ssh-server-openssh"
 
@@ -52,7 +55,7 @@ rootfs_postinstall_lumen() {
     for type in rsa ecdsa ed25519; do
         keyfile="${IMAGE_ROOTFS}/etc/ssh/ssh_host_${type}_key"
         if [ ! -f "$keyfile" ]; then
-            ssh-keygen -q -N '' -t $type -f "$keyfile"
+            ${STAGING_BINDIR_NATIVE}/ssh-keygen -q -N '' -t $type -f "$keyfile"
         fi
     done
     chmod 600 ${IMAGE_ROOTFS}/etc/ssh/ssh_host_*_key
