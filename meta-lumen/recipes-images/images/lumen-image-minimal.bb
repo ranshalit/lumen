@@ -26,7 +26,7 @@ IMAGE_INSTALL += " \
     util-linux \
 "
 
-# Post-install script to create nexus user and configure sudo
+# Post-install script to create nexus user, configure sudo, and pre-generate SSH host keys
 rootfs_postinstall_lumen() {
     # Create nexus user with pre-computed password hash: Pp12345678
     echo 'nexus:$1$zqutX3PP$7yMwtINW/p.UC/W/qYHvF0:19000:0:99999:7:::' >> ${IMAGE_ROOTFS}/etc/shadow
@@ -45,6 +45,18 @@ rootfs_postinstall_lumen() {
     # Ensure sudoers is configured
     echo 'nexus ALL=(ALL) NOPASSWD: ALL' >> ${IMAGE_ROOTFS}/etc/sudoers.d/nexus
     chmod 440 ${IMAGE_ROOTFS}/etc/sudoers.d/nexus
+
+    # Pre-generate SSH host keys at image build time so first boot has no key-gen delay.
+    # sshd_check_keys skips generation if keys already exist.
+    mkdir -p ${IMAGE_ROOTFS}/etc/ssh
+    for type in rsa ecdsa ed25519; do
+        keyfile="${IMAGE_ROOTFS}/etc/ssh/ssh_host_${type}_key"
+        if [ ! -f "$keyfile" ]; then
+            ssh-keygen -q -N '' -t $type -f "$keyfile"
+        fi
+    done
+    chmod 600 ${IMAGE_ROOTFS}/etc/ssh/ssh_host_*_key
+    chmod 644 ${IMAGE_ROOTFS}/etc/ssh/ssh_host_*_key.pub
 }
 
 ROOTFS_POSTINSTALL_COMMAND:append:lumen = "rootfs_postinstall_lumen; "
