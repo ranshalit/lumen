@@ -33,6 +33,11 @@ DISTRO_FEATURES:remove = " \
 # tegra-common.inc adds it, but packagegroup-base-alsa → alsa-state is unwanted.
 MACHINE_FEATURES:remove = "alsa"
 
+# Remove display OOT kernel module — Lumen is headless, no HDMI/display output.
+# The rest of MACHINE_EXTRA_RDEPENDS is kept: fan control (active fan present),
+# tegra-nvstartup (CPU/GPU clock init), Ethernet modules (r8168/r8169).
+MACHINE_EXTRA_RDEPENDS:remove = "nvidia-kernel-oot-display"
+
 # syslog: removable — dmesg ring buffer is accessible live via `dmesg`
 VIRTUAL-RUNTIME_base-utils-syslog = ""
 
