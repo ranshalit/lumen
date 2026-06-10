@@ -46,14 +46,19 @@ class DeviceConnector:
 
 class SSHConnector(DeviceConnector):
     """Connect via SSH (ethernet-console skill)"""
-    def __init__(self, host: str = None, user: str = "nexus"):
+    def __init__(self, host: str = None, user: str = "nexus", password: str = None):
         self.host = host or "lumen-orin-nano-8gb"
         self.user = user
+        self.password = password
         self.name = f"SSH ({self.user}@{self.host})"
 
     def run_command(self, cmd: str) -> Tuple[int, str, str]:
         """Execute command via SSH"""
-        ssh_cmd = ["ssh", f"{self.user}@{self.host}", cmd]
+        ssh_args = ["ssh", "-o", "StrictHostKeyChecking=no"]
+        if self.password:
+            ssh_cmd = ["sshpass", "-p", self.password] + ssh_args + [f"{self.user}@{self.host}", cmd]
+        else:
+            ssh_cmd = ssh_args + ["-o", "BatchMode=yes", f"{self.user}@{self.host}", cmd]
         try:
             result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=10)
             return result.returncode, result.stdout, result.stderr
@@ -243,12 +248,12 @@ class BootValidator:
         
         return 0 if self.all_passed else 1
 
-def detect_connector() -> Optional[DeviceConnector]:
+def detect_connector(host: str = None, user: str = "nexus", password: str = None) -> Optional[DeviceConnector]:
     """Auto-detect best connection method: try SSH first, fall back to serial"""
     
     # Try SSH connection
     print(f"{BLUE}Detecting connection method...{RESET}")
-    ssh_conn = SSHConnector()
+    ssh_conn = SSHConnector(host, user, password)
     rc, _, _ = ssh_conn.run_command("echo OK")
     if rc == 0:
         print(f"{GREEN}SSH available, using SSH connector{RESET}\n")
@@ -274,17 +279,18 @@ Examples:
     parser.add_argument("--ssh", action="store_true", help="Force SSH connection")
     parser.add_argument("--host", default="lumen-orin-nano-8gb", help="SSH hostname/IP (default: lumen-orin-nano-8gb)")
     parser.add_argument("--user", default="nexus", help="SSH username (default: nexus)")
+    parser.add_argument("--password", default=None, help="SSH password (uses sshpass; prefer key auth when possible)")
     parser.add_argument("--ping-target", default="8.8.8.8", help="IP to ping for network test (default: 8.8.8.8)")
-    
+
     args = parser.parse_args()
 
     # Determine connection method
     if args.serial:
         connector = SerialConnector()
     elif args.ssh:
-        connector = SSHConnector(args.host, args.user)
+        connector = SSHConnector(args.host, args.user, args.password)
     else:
-        connector = detect_connector()
+        connector = detect_connector(args.host, args.user, args.password)
         if connector is None:
             print(f"{RED}Error: Could not establish connection via SSH or serial{RESET}")
             return 1
