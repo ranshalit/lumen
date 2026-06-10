@@ -35,3 +35,7 @@ MACHINE_FEATURES:remove = "alsa"
 
 # syslog: removable — dmesg ring buffer is accessible live via `dmesg`
 VIRTUAL-RUNTIME_base-utils-syslog = ""
+
+# Skip the extlinux boot menu countdown — always auto-boot the first entry.
+# The menu is never used on Lumen; recovery is via reflash (flash-lumen workflow).
+UBOOT_EXTLINUX_TIMEOUT = "0"
