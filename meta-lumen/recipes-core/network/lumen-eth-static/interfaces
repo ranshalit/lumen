@@ -5,4 +5,3 @@ auto eth0
 iface eth0 inet static
     address 192.0.5.10
     netmask 255.255.255.0
-    pre-up /bin/sh -c 'i=0; while [ $i -lt 20 ] && [ "$(cat /sys/class/net/eth0/operstate 2>/dev/null)" != "up" ]; do sleep 1; i=$((i+1)); done; true'
