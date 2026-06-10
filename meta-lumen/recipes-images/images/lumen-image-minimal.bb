@@ -11,9 +11,6 @@ COMPATIBLE_MACHINE = "(lumen)"
 
 inherit core-image
 
-# Pull in native ssh-keygen for host-side key pre-generation
-do_rootfs[depends] += "openssh-native:do_populate_sysroot"
-
 # No GUI, no X11
 IMAGE_FEATURES += "ssh-server-openssh"
 
@@ -48,18 +45,6 @@ rootfs_postinstall_lumen() {
     # Ensure sudoers is configured
     echo 'nexus ALL=(ALL) NOPASSWD: ALL' >> ${IMAGE_ROOTFS}/etc/sudoers.d/nexus
     chmod 440 ${IMAGE_ROOTFS}/etc/sudoers.d/nexus
-
-    # Pre-generate SSH host keys at image build time so first boot has no key-gen delay.
-    # sshd_check_keys skips generation if keys already exist.
-    mkdir -p ${IMAGE_ROOTFS}/etc/ssh
-    for type in rsa ecdsa ed25519; do
-        keyfile="${IMAGE_ROOTFS}/etc/ssh/ssh_host_${type}_key"
-        if [ ! -f "$keyfile" ]; then
-            ${STAGING_BINDIR_NATIVE}/ssh-keygen -q -N '' -t $type -f "$keyfile"
-        fi
-    done
-    chmod 600 ${IMAGE_ROOTFS}/etc/ssh/ssh_host_*_key
-    chmod 644 ${IMAGE_ROOTFS}/etc/ssh/ssh_host_*_key.pub
 }
 
 ROOTFS_POSTINSTALL_COMMAND:append:lumen = "rootfs_postinstall_lumen; "
