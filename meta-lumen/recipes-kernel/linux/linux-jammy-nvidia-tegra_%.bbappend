@@ -21,4 +21,5 @@ SRC_URI:append:lumen = " \
     file://strip-phase3-display-misc.cfg \
     file://no-initrd.cfg \
     file://strip-phase4-debug.cfg \
+    file://strip-phase5-fs-modules.cfg \
     "
