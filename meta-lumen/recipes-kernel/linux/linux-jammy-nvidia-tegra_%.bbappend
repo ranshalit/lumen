@@ -1,6 +1,6 @@
 # meta-lumen/recipes-kernel/linux/linux-jammy-nvidia-tegra_%.bbappend
 #
-# Lumen-specific kernel config fragments and source patches.
+# Lumen-specific kernel config fragments.
 # DTS/DTB patches are applied in nvidia-kernel-oot_%.bbappend because
 # in JetPack 6.x (L4T 36.x) device trees are built out-of-tree by
 # the nvidia-kernel-oot recipe.
@@ -12,10 +12,6 @@
 #   Phase 4 — FTRACE/function tracer, SLUB_DEBUG, DEBUG_KERNEL (production hardening)
 #   Phase 5 — FUSE/VFAT/NTFS converted to modules (not needed at early boot)
 #
-# Source patches:
-#   0001 — nvme/pci: PROBE_PREFER_ASYNCHRONOUS (NVMe enumerates off main init thread)
-#   0002 — pcie-tegra194: PROBE_PREFER_ASYNCHRONOUS (PCIe link training async)
-#
 # To roll back a phase: git revert <phase-commit> && bitbake linux-jammy-nvidia-tegra
 FILESEXTRAPATHS:prepend:lumen := "${THISDIR}/linux-jammy-nvidia-tegra:"
 
@@ -26,6 +22,4 @@ SRC_URI:append:lumen = " \
     file://no-initrd.cfg \
     file://strip-phase4-debug.cfg \
     file://strip-phase5-fs-modules.cfg \
-    file://0001-nvme-pci-prefer-asynchronous-probe.patch \
-    file://0002-pcie-tegra194-prefer-asynchronous-probe.patch \
     "
