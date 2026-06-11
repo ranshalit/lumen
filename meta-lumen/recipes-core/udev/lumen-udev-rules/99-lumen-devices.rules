@@ -1,20 +1,17 @@
 # Udev symlink rules for application serial/camera devices.
 #
-# Device IDs below are placeholders — replace ATTRS{idVendor} and
-# ATTRS{idProduct} with the actual USB VID:PID from:
-#   udevadm info -a -n /dev/ttyUSB<N>  (on the target hardware)
-#
-# After updating, rebuild the image or run on the board:
+# After updating, rebuild the image or reload on the board:
 #   udevadm control --reload-rules && udevadm trigger
 
-# Pixhawk autopilot (USB serial) — VID:PID 26ac:0011 (3DR/Holybro)
-SUBSYSTEM=="tty", ATTRS{idVendor}=="26ac", ATTRS{idProduct}=="0011", SYMLINK+="ttyPixhawk"
+# Pixhawk autopilot — two possible USB adapters
+SUBSYSTEM=="tty", ATTRS{idVendor}=="067b", ATTRS{idProduct}=="2303", SYMLINK+="ttyPixhawk", MODE="0666"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="ttyPixhawk", MODE="0666"
 
-# Teensy microcontroller (USB serial) — VID:PID 16c0:0483 (PJRC)
-SUBSYSTEM=="tty", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="0483", SYMLINK+="ttyTeensy"
+# Teensy microcontroller — on-board UART (3100000.serial)
+SUBSYSTEM=="tty", KERNELS=="3100000.serial", SYMLINK+="ttyTeensy", MODE="0666"
 
-# Hodakev device (USB serial) — VID:PID unknown, update from hardware
-SUBSYSTEM=="tty", ATTRS{idVendor}=="XXXX", ATTRS{idProduct}=="XXXX", SYMLINK+="ttyHodakev"
+# Hodakev device — on-board UART (3110000.serial)
+SUBSYSTEM=="tty", KERNELS=="3110000.serial", SYMLINK+="ttyHodakev", MODE="0666"
 
-# Camera serial interface (USB serial) — VID:PID unknown, update from hardware
-SUBSYSTEM=="tty", ATTRS{idVendor}=="XXXX", ATTRS{idProduct}=="YYYY", SYMLINK+="ttyCameraSerial"
+# Camera serial interface — USB serial (Cypress VID:PID 04b4:7510)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="04b4", ATTRS{idProduct}=="7510", SYMLINK+="ttyCameraSerial", MODE="0666"
