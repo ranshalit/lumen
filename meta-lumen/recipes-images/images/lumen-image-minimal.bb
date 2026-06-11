@@ -30,6 +30,7 @@ IMAGE_INSTALL += " \
     nvidia-container-toolkit \
     nvidia-docker \
     docker-compose \
+    lumen-udev-rules \
 "
 
 # Post-install script to create nexus user, configure sudo, and pre-generate SSH host keys

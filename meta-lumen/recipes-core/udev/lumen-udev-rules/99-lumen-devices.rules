@@ -1,0 +1,20 @@
+# Udev symlink rules for application serial/camera devices.
+#
+# Device IDs below are placeholders — replace ATTRS{idVendor} and
+# ATTRS{idProduct} with the actual USB VID:PID from:
+#   udevadm info -a -n /dev/ttyUSB<N>  (on the target hardware)
+#
+# After updating, rebuild the image or run on the board:
+#   udevadm control --reload-rules && udevadm trigger
+
+# Pixhawk autopilot (USB serial) — VID:PID 26ac:0011 (3DR/Holybro)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="26ac", ATTRS{idProduct}=="0011", SYMLINK+="ttyPixhawk"
+
+# Teensy microcontroller (USB serial) — VID:PID 16c0:0483 (PJRC)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="0483", SYMLINK+="ttyTeensy"
+
+# Hodakev device (USB serial) — VID:PID unknown, update from hardware
+SUBSYSTEM=="tty", ATTRS{idVendor}=="XXXX", ATTRS{idProduct}=="XXXX", SYMLINK+="ttyHodakev"
+
+# Camera serial interface (USB serial) — VID:PID unknown, update from hardware
+SUBSYSTEM=="tty", ATTRS{idVendor}=="XXXX", ATTRS{idProduct}=="YYYY", SYMLINK+="ttyCameraSerial"
