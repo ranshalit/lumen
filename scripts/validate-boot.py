@@ -278,7 +278,7 @@ class BootValidator:
             self.check("NTP (chrony)", False, "chronyd not running")
             return
         # chronyc may not be installed; fall back to checking /var/run/chrony or proc
-        rc2, output2 = self.run_command("ls /var/run/chrony* /run/chrony* 2>/dev/null | head -1")
+        rc2, output2 = self.run_command("ls /var/run/chrony* /run/chrony* 2>/dev/null | sed -n '1p'")
         details = f"chronyd running, socket {output2.strip()}" if output2.strip() else "chronyd running"
         self.check("NTP (chrony)", True, details)
 
