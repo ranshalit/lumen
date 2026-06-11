@@ -26,7 +26,7 @@ IMAGE_INSTALL += " \
     util-linux \
     chrony \
     docker-moby \
-    moby-containerd \
+    containerd-opencontainers \
     nvidia-container-toolkit \
     nvidia-docker \
     docker-compose \

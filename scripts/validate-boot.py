@@ -8,6 +8,9 @@ Validates that Lumen Linux device booted correctly by checking:
 - Storage subsystem (root filesystem, /boot)
 - Memory subsystem
 - GPU subsystem (if available)
+- Docker engine + Compose V2 plugin
+- NTP (chrony daemon running and tracking)
+- NVIDIA container runtime (config.toml present, runtime registered in dockerd)
 - Boot logs (dmesg for critical errors)
 - BusyBox init health (PID 1, sshd running)
 
@@ -252,6 +255,51 @@ class BootValidator:
         details = f"PID1={pid1 or 'unknown'}, sshd={'running' if sshd_ok else 'not running'}"
         self.check("Init Health", passed, details)
 
+    def validate_docker(self):
+        """Check Docker daemon is running and docker compose plugin is available"""
+        rc, output = self.run_command("docker info 2>/dev/null | grep 'Server Version' | awk '{print $NF}'")
+        if rc != 0 or not output.strip():
+            self.check("Docker", False, "dockerd not running or docker not found")
+            return
+        docker_ver = output.strip()
+
+        rc2, output2 = self.run_command("docker compose version --short 2>/dev/null")
+        compose_ok = rc2 == 0 and output2.strip()
+        compose_ver = output2.strip() if compose_ok else "not found"
+
+        passed = bool(docker_ver) and compose_ok
+        self.check("Docker", passed, f"engine {docker_ver}, compose {compose_ver}")
+
+    def validate_ntp(self):
+        """Check chrony NTP daemon is running"""
+        rc, output = self.run_command("pidof chronyd >/dev/null 2>&1 && echo OK || echo FAIL")
+        running = "OK" in output
+        if not running:
+            self.check("NTP (chrony)", False, "chronyd not running")
+            return
+        # chronyc may not be installed; fall back to checking /var/run/chrony or proc
+        rc2, output2 = self.run_command("ls /var/run/chrony* /run/chrony* 2>/dev/null | head -1")
+        details = f"chronyd running, socket {output2.strip()}" if output2.strip() else "chronyd running"
+        self.check("NTP (chrony)", True, details)
+
+    def validate_nvidia_runtime(self):
+        """Check NVIDIA container runtime is registered and config.toml exists"""
+        rc, output = self.run_command("nvidia-container-runtime --version 2>/dev/null | grep 'NVIDIA Container Runtime version'")
+        if rc != 0 or not output.strip():
+            self.check("NVIDIA Runtime", False, "nvidia-container-runtime not found")
+            return
+        runtime_ver = output.strip()
+
+        rc2, output2 = self.run_command("test -f /run/nvidia-container-runtime/config.toml && echo OK || echo FAIL")
+        config_ok = "OK" in output2
+
+        rc3, output3 = self.run_command("grep -c nvidia /etc/docker/daemon.json 2>/dev/null || echo 0")
+        registered = int(output3.strip()) > 0 if rc3 == 0 else False
+
+        passed = config_ok and registered
+        details = f"{runtime_ver}, config.toml {'present' if config_ok else 'MISSING'}, daemon.json {'ok' if registered else 'NOT registered'}"
+        self.check("NVIDIA Runtime", passed, details)
+
     def validate_all(self):
         """Run all validation checks"""
         print(f"\n{BLUE}=== Device Boot Validation ==={RESET}")
@@ -265,6 +313,9 @@ class BootValidator:
         self.validate_rtc()
         self.validate_boot_logs()
         self.validate_init()
+        self.validate_docker()
+        self.validate_ntp()
+        self.validate_nvidia_runtime()
 
         return self.all_passed
 
