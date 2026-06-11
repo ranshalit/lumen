@@ -1,0 +1,10 @@
+add to validation; docker, runtime nvidia, ntp
+  ✅ DONE - validate-boot.py checks Docker (engine+compose), NTP (chronyd), NVIDIA runtime
+
+2. Docker group fix (nexus without sudo):
+   - committed to app_req branch, takes effect on next kas build + flash
+   - until then, nexus needs sudo for docker commands
+
+3. Udev VID:PIDs for Hodakev and CameraSerial:
+   - placeholders (XXXX) in meta-lumen/recipes-core/udev/lumen-udev-rules/99-lumen-devices.rules
+   - plug in hardware and run: udevadm info -a -n /dev/ttyUSB<N> to get real vendor/product IDs
