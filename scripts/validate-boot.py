@@ -257,13 +257,13 @@ class BootValidator:
 
     def validate_docker(self):
         """Check Docker daemon is running and docker compose plugin is available"""
-        rc, output = self.run_command("docker info 2>/dev/null | grep 'Server Version' | awk '{print $NF}'")
+        rc, output = self.run_command("sudo docker info 2>/dev/null | grep 'Server Version' | awk '{print $NF}'")
         if rc != 0 or not output.strip():
             self.check("Docker", False, "dockerd not running or docker not found")
             return
         docker_ver = output.strip()
 
-        rc2, output2 = self.run_command("docker compose version --short 2>/dev/null")
+        rc2, output2 = self.run_command("sudo docker compose version --short 2>/dev/null")
         compose_ok = rc2 == 0 and output2.strip()
         compose_ver = output2.strip() if compose_ok else "not found"
 

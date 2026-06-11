@@ -45,10 +45,16 @@ rootfs_postinstall_lumen() {
     chown -R 1000:1000 ${IMAGE_ROOTFS}/home/nexus
     chmod 755 ${IMAGE_ROOTFS}/home/nexus
     
-    # Add nexus to sudo and docker groups
+    # Add nexus to sudo group and to the docker group created by docker-moby
     sed -i 's/^%sudo/%sudo_members/' ${IMAGE_ROOTFS}/etc/group 2>/dev/null || true
     echo 'sudo:x:27:nexus' >> ${IMAGE_ROOTFS}/etc/group
-    echo 'docker:x:999:nexus' >> ${IMAGE_ROOTFS}/etc/group
+    # docker-moby creates the docker group; append nexus to its member list
+    if grep -q '^docker:' ${IMAGE_ROOTFS}/etc/group; then
+        sed -i '/^docker:/s/\(.*:\)$/\1nexus/' ${IMAGE_ROOTFS}/etc/group
+        sed -i '/^docker:/s/:nexus$/:nexus/' ${IMAGE_ROOTFS}/etc/group
+    else
+        echo 'docker:x:999:nexus' >> ${IMAGE_ROOTFS}/etc/group
+    fi
     
     # Ensure sudoers is configured
     echo 'nexus ALL=(ALL) NOPASSWD: ALL' >> ${IMAGE_ROOTFS}/etc/sudoers.d/nexus
