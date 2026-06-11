@@ -69,18 +69,6 @@ do_compile:append:lumen() {
         else
             bbwarn "lumen: could not disable pcie@141e0000 in ${base}.dtb (node may not exist)"
         fi
-
-        # E — Unused peripherals: audio fabric + SPI controllers (no hardware on Lumen)
-        # aconnect@2900000: APB audio fabric — no audio hardware on Lumen
-        # spi@3210000/3230000/3270000: SPI-A/B/D — no SPI devices on Lumen carrier
-        # Kept: rce-fabric (camera in use), actmon/hwpm/mc-hwpm (tegrastats/Nsight).
-        for node in aconnect@2900000 spi@3210000 spi@3230000 spi@3270000; do
-            if fdtput -t s "$dtb" "/bus@0/${node}" status disabled 2>/dev/null; then
-                bbdebug 1 "lumen: disabled ${node} in ${base}.dtb"
-            else
-                bbwarn "lumen: could not disable ${node} in ${base}.dtb (node may not exist)"
-            fi
-        done
     done
 
     # ------------------------------------------------------------------ #
