@@ -25,7 +25,12 @@ IMAGE_INSTALL += " \
     i2c-tools \
     util-linux \
     chrony \
-    docker-ce \
+    docker-moby \
+    moby-containerd \
+    nvidia-container-toolkit \
+    nvidia-docker \
+    docker-compose \
+    lumen-udev-rules \
 "
 
 # Post-install script to create nexus user, configure sudo, and pre-generate SSH host keys
@@ -52,6 +57,6 @@ rootfs_postinstall_lumen() {
 
 ROOTFS_POSTINSTALL_COMMAND:append:lumen = "rootfs_postinstall_lumen; "
 
-# rootfs size: 2 GiB (override with IMAGE_ROOTFS_SIZE in local.conf if needed)
-IMAGE_ROOTFS_SIZE ?= "2097152"
+# rootfs size: 8 GiB — Docker engine + /var/lib/docker layer storage requires headroom
+IMAGE_ROOTFS_SIZE ?= "8388608"
 IMAGE_OVERHEAD_FACTOR ?= "1.2"

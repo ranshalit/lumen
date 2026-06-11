@@ -1,0 +1,32 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          nvidia-container-setup
+# Required-Start:    $local_fs $remote_fs
+# Required-Stop:
+# Default-Start:     5
+# Default-Stop:
+# Short-Description: Generate NVIDIA container runtime config
+### END INIT INFO
+
+RUNTIME_DIR=/run/nvidia-container-runtime
+CONFIG_TOML=$RUNTIME_DIR/config.toml
+
+case "$1" in
+    start)
+        mkdir -p $RUNTIME_DIR
+        if [ -x /usr/libexec/nvidia-container-runtime/generate-config ]; then
+            RUNTIME_DIRECTORY=$RUNTIME_DIR /usr/libexec/nvidia-container-runtime/generate-config
+            echo "nvidia-container-setup: config written to $CONFIG_TOML"
+        else
+            echo "nvidia-container-setup: generate-config not found, skipping"
+        fi
+        ;;
+    stop|restart|force-reload)
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|force-reload}"
+        exit 1
+        ;;
+esac
+
+exit 0

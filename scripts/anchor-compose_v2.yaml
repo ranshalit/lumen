@@ -1,0 +1,160 @@
+name: gambon
+
+x-constants:
+  ipdl_version: &IPDL_VERSION "8.6.9"
+  # NOTE necessary code duplication :(
+  camera_model: &INTERNAL_CAMERA_MODEL_PATH "/var/camera_model.txt"
+  env_camera_model: &ENV_INTERNAL_CAMERA_MODEL_PATH "CAMERA_MODEL_FILE=/var/camera_model.txt"
+  m3d_params: &INTERNAL_M3D_PARAMS "/etc/matchd/params.ini"
+  infra_dir: &INTERNAL_INFRA_DIR "/var/infra/"
+  report_dir: &INTERNAL_REPORT_DIR "/app/logs/"
+  env_report_dir: &ENV_INTERNAL_REPORT_DIR "RECORD_DIR=/app/logs/current/anchor"
+  replay_dir: &INTERNAL_REPLAY_DIR "/var/replay/"
+  env_replay_dir: &ENV_INTERNAL_REPLAY_DIR "REPLAY_DIR=/var/replay/"
+
+# TODO move to extends syntax to reduce code duplication
+x-template:
+  shared_template: &shared_template
+    network_mode: host
+    tty: true
+    stop_signal: SIGINT
+    restart: no
+
+  gambon_template: &gambon_template
+    <<: *shared_template
+    image: server_${ARCH:-arm}:${SERVER_IMAGE_TAG:-latest}
+    build:
+      context: ./services/server/run
+      dockerfile: dockerfile
+      args:
+        ARCH: ${ARCH:-arm}
+        IPDL_VERSION: *IPDL_VERSION
+    init: true
+
+  m3d_template: &m3d_template
+    <<: *shared_template
+    image: m3d_${ARCH:-arm}:${M3D_IMAGE_TAG:-latest}
+    profiles:
+      - m3d
+    build:
+      context: ./services/m3d/run
+      dockerfile: dockerfile
+      args:
+        ARCH: ${ARCH:-arm}
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    init: true
+    
+
+services:
+  server:
+    <<: *gambon_template
+    container_name: server
+    volumes:
+      - type: bind
+        source: "${INFRA_DIR}"
+        target: *INTERNAL_INFRA_DIR
+        read_only: true
+      - type: bind
+        source: "${REPORT_DIR}"
+        target: *INTERNAL_REPORT_DIR
+    environment:
+      - *ENV_INTERNAL_REPORT_DIR
+      - KF_SELECTOR
+      - FILTER_TYPE
+      - CONSISTENCY
+      - COV_MEPPER
+      - IMAGE_ENDIANNESS
+      - IMAGE_BIT_DEPTH
+      - KF_OVERLAP_THRESH
+      - COV_PRECISE
+      - COV_NORMAL
+      - COV_LOST_UPPER
+      - COV_ALT
+      - COV_AZ
+      - COV_ROLL_PITCH
+      - SHOW_WINDOW
+      - LOG_ABBREV_TRACKS
+      - DISCARD
+      - NO_ALT_CONV
+      - CORRECT_SENSOR
+      - SAVE_IMAGES
+      - MPC_DEBUG_SAVE_DATA
+      - MPC_DEBUG
+      - PGP_DEBUG
+      - MATCHER
+      - VERBOSE
+      - VERBOSE_GAMBON
+      - NODEBUG
+      - CONFIG_POLICY
+    depends_on:
+      matchd:
+        condition: service_healthy
+        required: false
+    command: gambon-server
+
+  player:
+    <<: *gambon_template
+    container_name: player
+    volumes:
+      - type: bind
+        source: "${REPLAY_DIR}"
+        target: *INTERNAL_REPLAY_DIR
+        read_only: false
+        
+      - type: bind
+        source: "${CAMERA_MODEL_FILE}"
+        target: *INTERNAL_CAMERA_MODEL_PATH
+        read_only: true
+
+    environment:
+      - *ENV_INTERNAL_CAMERA_MODEL_PATH
+      - *ENV_INTERNAL_REPLAY_DIR
+      - PLAYER_NODISPLAY=${PLAYER_NODISPLAY:-1}
+      - BEGIN_IDX
+      - END_IDX
+      - ANCHOR
+      - ANCHOR_ALT
+      - PLAYER_NOTRACKS
+      - PLAYER_DRYRUN
+      - PRELOAD
+      - PLAYER_SAVE
+      - MATCHER
+      - VERBOSE
+      - VERBOSE_PLAYER
+      - NODEBUG
+    profiles:
+      - player
+    depends_on:
+      - server
+    command: ${PLAYER_TYPE:-gambon-player-nav}
+
+  renderd:
+    <<: *m3d_template
+    command: renderd
+    container_name: renderd
+    volumes:
+      - type: bind
+        source: "${INFRA_DIR}"
+        target: *INTERNAL_INFRA_DIR
+        read_only: true
+
+  matchd:
+    <<: *m3d_template
+    command: matchd
+    container_name: matchd
+    volumes:
+      - type: bind
+        source: "${M3D_PARAMS}"
+        target: *INTERNAL_M3D_PARAMS
+        read_only: true
+    profiles:
+      - m3d
+    depends_on:
+      - renderd

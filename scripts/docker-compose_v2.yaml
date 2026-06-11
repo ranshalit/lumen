@@ -1,0 +1,65 @@
+version: '3.9'
+
+include:
+  - anchor-compose.yaml
+
+x-nexus-base: &nexus-base
+  network_mode: host
+  ipc: host
+  command: ['-r','Replay', '-e','Replay', '-n', '1']
+  init: true
+
+
+services:
+  dmc:
+    <<: *nexus-base
+    container_name: dmc
+    cpuset: "0,1,2"
+    image: nexus-aerial-dmc:${DMC_VERSION}
+    volumes:
+      - /home/$USER/project_outputs/dockers/:/app/logs
+      - ./nexus_unified_configuration.py:/app/NexusAgent/Common/nexus_unified_configuration.py
+      - ./project_config.yaml:/app/NexusAgent/Common/EnvironmentConfigurations/Replay/project_config.yaml
+    environment:
+      - LD_LIBRARY_PATH=/app/Services/Sensor/TargetServer/bin/arm64:/usr/local/cuda-12.6/lib64
+      - PYTHONPATH=/app/Services/Sensor/TargetServer/shr/boson/arm64
+    runtime: nvidia
+
+  nmc:
+    <<: *nexus-base
+    container_name: nmc
+    cpuset: "3,4"
+    image: nexus-aerial-nmc:${NMC_VERSION}
+    volumes:
+      - /home/$USER/project_outputs/dockers/:/app/logs
+      - ./nexus_unified_configuration.py:/app/NexusAgent/Common/nexus_unified_configuration.py
+      - ./project_config.yaml:/app/NexusAgent/Common/EnvironmentConfigurations/Replay/project_config.yaml
+      - ./camera.txt:/app/Services/Anchor/camera.txt
+      - ./nav_service.py:/app/Services/nav_service.py
+    entrypoint: ["python", "-u", "-m", "NexusAgent.Common.agent_starter", "-p", "NMC"]
+    environment:
+      - LD_LIBRARY_PATH=/app/Services/Nav_alg/bin/arm64
+
+
+  vmc:
+    <<: *nexus-base
+    container_name: vmc
+    cpuset: "0,1,2"
+    image: nexus-aerial-vmc:${VMC_VERSION}
+    volumes:
+      - ./nexus_unified_configuration.py:/app/NexusAgent/Common/nexus_unified_configuration.py
+      - ./project_config.yaml:/app/NexusAgent/Common/EnvironmentConfigurations/Replay/project_config.yaml
+
+  dozzle:
+    image: dozzle:latest
+    container_name: dozzle
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    network_mode: host
+    environment:
+      - DOZZLE_ENABLE_ACTIONS=true
+      - DOZZLE_ENABLE_SHELL=true
+      - DOZZLE_ADDR=0.0.0.0:13579
+
+
+

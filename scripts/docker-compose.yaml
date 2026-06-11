@@ -88,10 +88,9 @@ services:
     container_name: dozzle
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      - 13579:8080
+    network_mode: host
     environment:
       - DOZZLE_ENABLE_ACTIONS=true
       - DOZZLE_ENABLE_SHELL=true
-      - DOZZLE_HOSTNAME=0.0.0.0
+      - DOZZLE_ADDR=0.0.0.0:13579
     init: true
