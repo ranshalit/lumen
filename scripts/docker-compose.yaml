@@ -1,0 +1,97 @@
+name: dragonfly
+
+include:
+  - anchor-compose.yaml
+
+services:
+  gcu:
+    cpuset: "4,5"
+    container_name: gcu
+    image: nexus-aerial-gcu:${GCU_VERSION}
+    volumes:
+      - /home/$USER/project_outputs/dockers/:/app/logs
+      - ./nexus_unified_configuration.py:/app/NexusAgent/Common/nexus_unified_configuration.py
+      - ./project_config.yaml:/app/NexusAgent/Common/EnvironmentConfigurations/Field/project_config.yaml
+    command: ['-r','DragonFly', '-e','Field', '-n', '1']
+    devices:
+      - /dev/ttyPixhawk:/dev/ttyPixhawk
+      - /dev/ttyTeensy:/dev/ttyTeensy
+    network_mode: host
+    ipc: host
+    init: true
+
+  dmc:
+    cpuset: "0,1,2"
+    container_name: dmc
+    image: nexus-aerial-dmc:${DMC_VERSION}
+    volumes:
+      - /home/$USER/project_outputs/dockers/:/app/logs
+      - ./nexus_unified_configuration.py:/app/NexusAgent/Common/nexus_unified_configuration.py
+      - ./project_config.yaml:/app/NexusAgent/Common/EnvironmentConfigurations/Field/project_config.yaml
+      - ./ts_config:/app/Services/Sensor/TargetServer/config
+      - ./libtargetmanager:/app/Services/Sensor/TargetServer/bin/arm64
+    devices:
+      - /dev/video0:/dev/video0
+      - /dev/ttyCameraSerial:/dev/ttyCameraSerial
+    environment:
+      - LD_LIBRARY_PATH=/app/Services/Sensor/TargetServer/bin/arm64:/usr/local/cuda-12.6/lib64
+      - PYTHONPATH=/app/Services/Sensor/TargetServer/shr/boson/arm64
+    network_mode: host
+    runtime: nvidia
+    command: ['-r','DragonFly', '-e','Field', '-n', '1']
+    ipc: host
+    init: true
+    
+  nmc:
+    cpuset: "3,4"
+    container_name: nmc
+    image: nexus-aerial-nmc:${NMC_VERSION}
+    volumes:
+      - /home/$USER/project_outputs/dockers/:/app/logs
+      - ./nexus_unified_configuration.py:/app/NexusAgent/Common/nexus_unified_configuration.py
+      - ./project_config.yaml:/app/NexusAgent/Common/EnvironmentConfigurations/Field/project_config.yaml
+      - ./camera.txt:/app/Services/Anchor/camera.txt
+    command: ['-r','DragonFly', '-e','Field', '-n', '1']
+    devices:
+      - /dev/ttyHodakev:/dev/ttyHodakev
+    environment:
+      - LD_LIBRARY_PATH=/app/Services/Nav_alg/bin/arm64
+    network_mode: host
+    ipc: host
+    init: true
+    
+  vmc:
+    cpuset: "0,1,2"
+    container_name: vmc
+    image: nexus-aerial-vmc:${VMC_VERSION}
+    volumes:
+      - /home/$USER/project_outputs/dockers/:/app/logs
+      - ./nexus_unified_configuration.py:/app/NexusAgent/Common/nexus_unified_configuration.py
+      - ./project_config.yaml:/app/NexusAgent/Common/EnvironmentConfigurations/Field/project_config.yaml
+    command: ['-r','DragonFly', '-e','Field', '-n', '1']
+    network_mode: host
+    ipc: host
+    init: true
+
+  rs:
+    cpuset: "3"
+    container_name: rs
+    image: common-routing-service/arm64:${RS_VERSION}
+    network_mode: host
+    ipc: host
+    environment:
+      - DOMAIN_ID=11
+    init: true
+
+  dozzle:
+    image: dozzle:latest
+    container_name: dozzle
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 13579:8080
+    environment:
+      - DOZZLE_ENABLE_ACTIONS=true
+      - DOZZLE_ENABLE_SHELL=true
+      - DOZZLE_HOSTNAME=0.0.0.0
+    init: true
