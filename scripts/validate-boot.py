@@ -210,6 +210,33 @@ class BootValidator:
         else:
             self.check("Boot Logs", False, f"{critical_count} critical error(s) found")
 
+    def validate_rtc(self):
+        """Check RTC device is present and readable"""
+        rc, output = self.run_command("cat /sys/class/rtc/rtc0/name 2>/dev/null")
+        if rc != 0 or not output.strip():
+            self.check("RTC", False, "/sys/class/rtc/rtc0 not found")
+            return
+
+        rtc_name = output.strip()
+
+        rc2, date_out = self.run_command("cat /sys/class/rtc/rtc0/date 2>/dev/null")
+        rc3, time_out = self.run_command("cat /sys/class/rtc/rtc0/time 2>/dev/null")
+        readable = rc2 == 0 and rc3 == 0 and date_out.strip() and time_out.strip()
+
+        # Warn if RTC date looks like epoch/reset (pre-2020)
+        stale = False
+        try:
+            year = int(date_out.strip().split("-")[0])
+            stale = year < 2020
+        except (ValueError, IndexError):
+            pass
+
+        details = f"{rtc_name}, {date_out.strip()} {time_out.strip()}"
+        if stale:
+            details += " ⚠️  date looks stale (battery?)"
+
+        self.check("RTC", readable, details)
+
     def validate_init(self):
         """Check BusyBox init health (PID 1 is init, key init.d services running)"""
         # Confirm PID 1 is init (not systemd)
@@ -235,6 +262,7 @@ class BootValidator:
         self.validate_storage()
         self.validate_memory()
         self.validate_gpu()
+        self.validate_rtc()
         self.validate_boot_logs()
         self.validate_init()
 
