@@ -22,4 +22,5 @@ SRC_URI:append:lumen = " \
     file://no-initrd.cfg \
     file://strip-phase4-debug.cfg \
     file://strip-phase5-fs-modules.cfg \
+    file://docker-support.cfg \
     "

@@ -24,6 +24,8 @@ IMAGE_INSTALL += " \
     htop \
     i2c-tools \
     util-linux \
+    chrony \
+    docker-ce \
 "
 
 # Post-install script to create nexus user, configure sudo, and pre-generate SSH host keys
@@ -38,9 +40,10 @@ rootfs_postinstall_lumen() {
     chown -R 1000:1000 ${IMAGE_ROOTFS}/home/nexus
     chmod 755 ${IMAGE_ROOTFS}/home/nexus
     
-    # Add nexus to sudo group
+    # Add nexus to sudo and docker groups
     sed -i 's/^%sudo/%sudo_members/' ${IMAGE_ROOTFS}/etc/group 2>/dev/null || true
     echo 'sudo:x:27:nexus' >> ${IMAGE_ROOTFS}/etc/group
+    echo 'docker:x:999:nexus' >> ${IMAGE_ROOTFS}/etc/group
     
     # Ensure sudoers is configured
     echo 'nexus ALL=(ALL) NOPASSWD: ALL' >> ${IMAGE_ROOTFS}/etc/sudoers.d/nexus

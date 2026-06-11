@@ -16,3 +16,4 @@ poky/
 meta-openembedded/
 meta-tegra/
 build/
+meta-virtualization/
