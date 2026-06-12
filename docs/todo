@@ -1,4 +1,28 @@
 add to validation; docker, runtime nvidia, ntp
+
+4. Boot time optimization (target: 12s → <4s to serial login prompt):
+
+   Already done in repo:
+   ✅ MB1/MB2 logging disabled (TEGRA_MB1_LOG_LEVEL = "0")
+   ✅ BPMP combined UART disabled (TEGRA_BPMP_SERIAL_LOGGING = "0", deletes /serial from BPMP DTB)
+   ✅ EEPROM read disabled (cvb_eeprom_read_size = 0x0)
+   ✅ quiet loglevel=0 audit=0 in kernel args
+   ✅ No initramfs
+   ✅ extlinux timeout = 0
+   ✅ UEFI stripped (USB/display/network boot/memory test/serial console)
+   ✅ bootlogd + dmesg.sh removed from rcS
+   ✅ A/B verifier (userspace) made non-blocking
+   ✅ Ethernet deferred to after login prompt
+
+   Remaining (in priority order):
+   ❌ #1 Make Docker + containerd init scripts non-blocking (background &) — est. 2-4s saving
+   ❌ #2 Make nvidia-container-setup (S50) non-blocking — runs before login, can defer
+   ❌ #3 Profile pre-kernel time: run `cat /proc/tegra_boot_times` on board to see MB1/MB2/UEFI split
+   ❌ #4 Audit nvstartup (priority 00 in rcS) — runs first, check if it blocks
+   ❌ #5 Disable A/B slot check in MB2 bootloader (we always reflash, ~50-100ms saving)
+
+   Note: Docker start can be deferred — app inside container tolerates waiting for its own
+   dependencies, so login prompt does not need to wait for Docker to be ready.
   ✅ DONE - validate-boot.py checks Docker (engine+compose), NTP (chronyd), NVIDIA runtime
 
 2. Docker group fix (nexus without sudo):
@@ -8,3 +32,19 @@ add to validation; docker, runtime nvidia, ntp
 3. Udev VID:PIDs for Hodakev and CameraSerial:
    - placeholders (XXXX) in meta-lumen/recipes-core/udev/lumen-udev-rules/99-lumen-devices.rules
    - plug in hardware and run: udevadm info -a -n /dev/ttyUSB<N> to get real vendor/product IDs
+
+4. lumen-app auto-start at boot (app_req branch):
+   - BSP owns: S60lumen-app init script starts docker compose at boot
+   - App team owns: /opt/dragonfly/docker-compose.yaml + images
+   - No BSP rebuild needed when app team updates their docker app
+
+   Open items from rubber-duck review:
+   a. Docker readiness race: S60 must wait for docker socket before compose up (bounded retry loop)
+   b. Remove '&' from 'docker compose up -d' — up -d already detaches; add --project-name lumen
+   c. Add restart: unless-stopped to compose services (crash recovery)
+   d. install.sh must check free disk space before loading images
+   e. install.sh must prune old images before loading new ones (prevent 8GB rootfs bloat)
+
+   Deferred:
+   - Power-fail-safe atomic image update (stage in versioned dir, atomic symlink swap)
+   - Static config.toml instead of generate-config at boot
