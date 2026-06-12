@@ -18,3 +18,8 @@ echo ""
 echo "--- Runtime ---"
 echo "✅ container running"
 echo "hostname: $(hostname), arch: $(uname -m)"
+
+# Keep container alive (replace with real app entrypoint)
+echo ""
+echo "Validation complete — sleeping indefinitely (ctrl+c or docker stop to exit)"
+sleep infinity

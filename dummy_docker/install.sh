@@ -45,7 +45,7 @@ docker rmi -f "${IMAGE_NAME}:${IMAGE_TAG}" 2>/dev/null || true
 
 # Build lumen-base from device rootfs
 echo "Building ${IMAGE_NAME}:${IMAGE_TAG} from device rootfs..."
-TMPTAR=$(mktemp /tmp/lumen-rootfs-XXXX.tar.gz)
+TMPTAR=/tmp/lumen-rootfs-$$.tar.gz
 tar -czf "$TMPTAR" \
     --exclude=./proc --exclude=./sys --exclude=./dev \
     --exclude=./tmp --exclude=./run --exclude=./var/lib/docker \
@@ -55,10 +55,11 @@ docker import "$TMPTAR" "${IMAGE_NAME}:${IMAGE_TAG}"
 rm -f "$TMPTAR"
 echo "Image ${IMAGE_NAME}:${IMAGE_TAG} loaded"
 
-# Deploy compose file
+# Deploy compose file and validate.sh
 echo "Deploying compose file to ${INSTALL_DIR}..."
 mkdir -p "$INSTALL_DIR"
 cp "$COMPOSE_FILE" "$INSTALL_DIR/docker-compose.yaml"
+cp "$(dirname "$0")/validate.sh" "$INSTALL_DIR/validate.sh"
 chown -R nexus:nexus "$INSTALL_DIR" 2>/dev/null || true
 
 echo ""

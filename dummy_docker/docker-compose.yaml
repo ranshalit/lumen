@@ -8,4 +8,6 @@ services:
     runtime: nvidia
     privileged: true
     restart: unless-stopped
+    volumes:
+      - /opt/dragonfly/validate.sh:/validate.sh:ro
     command: ["/bin/sh", "/validate.sh"]
