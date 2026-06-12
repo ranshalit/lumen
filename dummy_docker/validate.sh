@@ -15,6 +15,12 @@ ls /dev/nvidia0 /dev/nvmap > /dev/null 2>&1 && echo "✅ NVIDIA devices present"
 nvidia-smi -L 2>&1 && echo "✅ nvidia-smi OK" || echo "❌ nvidia-smi failed"
 
 echo ""
+echo "--- Serial Devices (udev symlinks) ---"
+for dev in ttyTeensy ttyHodakev ttyPixhawk ttyCameraSerial; do
+    ls /dev/$dev > /dev/null 2>&1 && echo "✅ /dev/$dev present" || echo "⚠️  /dev/$dev not found (hardware unplugged?)"
+done
+
+echo ""
 echo "--- Runtime ---"
 echo "✅ container running"
 echo "hostname: $(hostname), arch: $(uname -m)"

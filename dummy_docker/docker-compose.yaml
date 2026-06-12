@@ -9,5 +9,6 @@ services:
     privileged: true
     restart: unless-stopped
     volumes:
+      - /dev:/dev
       - /opt/dragonfly/validate.sh:/validate.sh:ro
     command: ["/bin/sh", "/validate.sh"]
