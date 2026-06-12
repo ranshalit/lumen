@@ -1,0 +1,11 @@
+version: '3.9'
+
+services:
+  lumen-dummy:
+    image: lumen-base:latest
+    container_name: lumen-dummy
+    network_mode: host
+    runtime: nvidia
+    privileged: true
+    restart: unless-stopped
+    command: ["/bin/sh", "/validate.sh"]

@@ -1,0 +1,58 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          lumen-app
+# Required-Start:    docker
+# Required-Stop:     docker
+# Default-Start:     5
+# Default-Stop:      0 1 6
+# Short-Description: Start lumen application stack via docker compose
+### END INIT INFO
+
+COMPOSE_FILE=/opt/dragonfly/docker-compose.yaml
+PROJECT=lumen
+DOCKER=/usr/bin/docker
+
+wait_for_docker() {
+    i=0
+    while [ $i -lt 10 ]; do
+        $DOCKER info >/dev/null 2>&1 && return 0
+        sleep 1
+        i=$((i+1))
+    done
+    return 1
+}
+
+case "$1" in
+    start)
+        if [ ! -f "$COMPOSE_FILE" ]; then
+            echo "lumen-app: no compose file at $COMPOSE_FILE, skipping"
+            exit 0
+        fi
+        if ! wait_for_docker; then
+            echo "lumen-app: dockerd not ready after 10s, skipping"
+            exit 0
+        fi
+        echo "lumen-app: starting application stack"
+        $DOCKER compose -f "$COMPOSE_FILE" --project-name "$PROJECT" up -d
+        ;;
+    stop)
+        if [ ! -f "$COMPOSE_FILE" ]; then
+            exit 0
+        fi
+        echo "lumen-app: stopping application stack"
+        $DOCKER compose -f "$COMPOSE_FILE" --project-name "$PROJECT" down
+        ;;
+    restart|force-reload)
+        $0 stop
+        $0 start
+        ;;
+    status)
+        $DOCKER compose -f "$COMPOSE_FILE" --project-name "$PROJECT" ps
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
+
+exit 0
