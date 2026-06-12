@@ -37,7 +37,7 @@ The board boots to a login prompt automatically. Docker starts at boot but
 ### Step 2 — Copy your deployment package to the board
 
 ```bash
-scp -r <your-package-folder>/ nexus@<board-ip>:/tmp/app/
+scp -r <your-package-folder> nexus@<board-ip>:/tmp/app/
 ```
 
 Your package folder must contain:
