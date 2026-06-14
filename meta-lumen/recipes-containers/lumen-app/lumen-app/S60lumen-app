@@ -24,16 +24,21 @@ wait_for_docker() {
 
 case "$1" in
     start)
-        if [ ! -f "$COMPOSE_FILE" ]; then
-            echo "lumen-app: no compose file at $COMPOSE_FILE, skipping"
-            exit 0
-        fi
-        if ! wait_for_docker; then
-            echo "lumen-app: dockerd not ready after 10s, skipping"
-            exit 0
-        fi
-        echo "lumen-app: starting application stack"
-        $DOCKER compose -f "$COMPOSE_FILE" --project-name "$PROJECT" up -d
+        # Run in a background subshell so the login prompt is not blocked.
+        # wait_for_docker polls up to 10s for dockerd to be ready (docker.init
+        # now returns before dockerd is fully up), then starts the compose stack.
+        (
+            if [ ! -f "$COMPOSE_FILE" ]; then
+                echo "lumen-app: no compose file at $COMPOSE_FILE, skipping"
+                exit 0
+            fi
+            if ! wait_for_docker; then
+                echo "lumen-app: dockerd not ready after 10s, skipping"
+                exit 0
+            fi
+            echo "lumen-app: starting application stack"
+            $DOCKER compose -f "$COMPOSE_FILE" --project-name "$PROJECT" up -d
+        ) &
         ;;
     stop)
         if [ ! -f "$COMPOSE_FILE" ]; then
