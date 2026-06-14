@@ -30,7 +30,73 @@ reflash is needed to update the application.**
 
 ### Step 1 — Flash the board
 
-Flash the latest Lumen BSP image (ask the BSP team for the image).
+Flash the Lumen BSP image for your specific module variant. Each variant has its
+own KAS config and produces a separate tegraflash tarball.
+
+**Variant → machine name mapping:**
+
+| Module | Machine name | SKU |
+|---|---|---|
+| Orin Nano 8GB | `lumen-orin-nano-8gb` | p3767-0003 |
+| Orin Nano 4GB | `lumen-orin-nano-4gb` | p3767-0004 |
+| Orin NX 8GB | `lumen-orin-nx-8gb` | p3767-0001 |
+| Orin NX 16GB | `lumen-orin-nx-16gb` | p3767-0000 |
+
+> ⚠️ The machine name must match the physical module. Flashing the wrong image onto the wrong board will likely brick it.
+
+**Build the image** (BSP team, from the lumen project root):
+
+```bash
+MACHINE=lumen-orin-nano-8gb   # adjust per variant
+kas build kas/$MACHINE.yml
+```
+
+The output tarball will be at:
+```
+build/tmp/deploy/images/$MACHINE/lumen-image-minimal-$MACHINE.rootfs.tegraflash.tar.gz
+```
+
+**Flash the board:**
+
+```bash
+MACHINE=lumen-orin-nano-8gb   # adjust per variant
+TARBALL=build/tmp/deploy/images/$MACHINE/lumen-image-minimal-$MACHINE.rootfs.tegraflash.tar.gz
+
+# 1. Reboot board into USB recovery (APX) mode
+python /home/ranshal/.copilot/skills/serial-console/scripts/serial_session.py reboot-recovery
+
+# 2. Confirm the board is visible as an APX USB device
+lsusb | grep -i "nvidia\|0955"
+
+# 3. Extract and flash
+FLASH_TMP=$(mktemp -d /tmp/lumen-flash-XXXX)
+tar -xf "$TARBALL" -C "$FLASH_TMP"
+cd "$FLASH_TMP" && sudo ./initrd-flash
+
+# 4. Clean up (initrd-flash creates root-owned files)
+cd / && sudo rm -rf "$FLASH_TMP"
+```
+
+Flashing typically takes 3–10 minutes. The board reboots automatically when done.
+
+#### Entering recovery mode manually (no serial console)
+
+If you don't have serial access, you can enter USB recovery mode by following these steps:
+
+1. **Power off** the board completely.
+2. **Connect** a USB-C cable between the board's USB recovery port and your host PC.
+3. **Press and hold** the **RECOVERY** button on the carrier board.
+4. **Apply power** (or press the POWER button if the board is already connected to power).
+5. **Release** the RECOVERY button after ~2 seconds.
+6. Verify the board is visible as an APX device on your host:
+   ```bash
+   lsusb | grep -i "nvidia\|0955"
+   # Expected: Bus ... ID 0955:7523 NVIDIA Corp. APX
+   ```
+7. Proceed with the extract-and-flash steps above.
+
+> 💡 On the Lumen carrier board the RECOVERY button is labeled **REC** and is located next to the POWER button.
+
 The board boots to a login prompt automatically. Docker starts at boot but
 `/opt/dragonfly/` is empty so no containers run yet.
 
