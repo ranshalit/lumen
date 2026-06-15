@@ -57,8 +57,8 @@ repos:
 local_conf_header:
   standard: |
     # Shared download and sstate-cache directories
-    DL_DIR ?= "${TOPDIR}/../downloads"
-    SSTATE_DIR ?= "${TOPDIR}/../sstate-cache"
+    DL_DIR = "/media/ranshal/jetson/shared/downloads"
+    SSTATE_DIR = "/media/ranshal/jetson/shared/sstate"
 
     # Image types: ext4 for rootfs + tegraflash tarball for flashing
     IMAGE_FSTYPES = "ext4 tegraflash"
