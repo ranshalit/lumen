@@ -1,0 +1,47 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          lumen-rootfs-resize
+# Required-Start:    mountall
+# Default-Start:     S
+# Default-Stop:
+# Short-Description: Grow the rootfs to fill the APP partition on first boot
+# Description:       The flashed ext4 image is small (IMAGE_ROOTFS_SIZE) while
+#                    the APP partition is auto-grown to fill the whole NVMe at
+#                    flash time. This one-shot service expands the mounted ext4
+#                    rootfs online so it uses the entire partition. It is a
+#                    no-op once the filesystem already fills the partition.
+### END INIT INFO
+
+FLAG=/var/lib/lumen-rootfs-resize.done
+
+case "$1" in
+    start)
+        # Already grown on a previous boot since the last flash -> nothing to do.
+        [ -f "$FLAG" ] && exit 0
+
+        # Resolve the block device backing "/". Lumen always boots from
+        # /dev/nvme0n1p1, but resolve dynamically for robustness.
+        ROOT_DEV=$(findmnt -n -o SOURCE / 2>/dev/null)
+        [ -z "$ROOT_DEV" ] && ROOT_DEV=/dev/nvme0n1p1
+
+        echo "lumen-rootfs-resize: growing $ROOT_DEV to fill its partition"
+
+        # Online resize of the mounted ext4 rootfs. resize2fs is idempotent:
+        # if the filesystem already fills the partition it exits immediately.
+        if resize2fs "$ROOT_DEV" >/dev/null 2>&1; then
+            mkdir -p "$(dirname "$FLAG")"
+            : > "$FLAG"
+            echo "lumen-rootfs-resize: done"
+        else
+            echo "lumen-rootfs-resize: resize2fs failed (will retry next boot)"
+        fi
+        ;;
+    stop|restart|force-reload|status)
+        ;;
+    *)
+        echo "Usage: $0 {start}"
+        exit 1
+        ;;
+esac
+
+exit 0

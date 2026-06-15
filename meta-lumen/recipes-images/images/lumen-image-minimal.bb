@@ -32,6 +32,7 @@ IMAGE_INSTALL += " \
     docker-compose \
     lumen-udev-rules \
     lumen-app \
+    lumen-rootfs-resize \
 "
 
 # Post-install script to create nexus user, configure sudo, and pre-generate SSH host keys
@@ -64,6 +65,9 @@ rootfs_postinstall_lumen() {
 
 ROOTFS_POSTINSTALL_COMMAND:append:lumen = "rootfs_postinstall_lumen; "
 
-# rootfs size: 8 GiB — Docker engine + /var/lib/docker layer storage requires headroom
+# Flashed rootfs size: 8 GiB — keeps the flash payload small/fast. The APP
+# partition (nvme0n1p1) is auto-grown by NVIDIA's flasher to fill the entire
+# NVMe, and lumen-rootfs-resize expands this ext4 filesystem to fill that
+# partition on first boot (e.g. ~237 GiB usable on a 256 GB NVMe).
 IMAGE_ROOTFS_SIZE ?= "8388608"
 IMAGE_OVERHEAD_FACTOR ?= "1.2"
