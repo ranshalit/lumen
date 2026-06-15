@@ -20,6 +20,7 @@ IMAGE_INSTALL += " \
     tegra-nvsciipc \
     lumen-eth-static \
     ifupdown \
+    ethtool \
     sudo \
     htop \
     i2c-tools \

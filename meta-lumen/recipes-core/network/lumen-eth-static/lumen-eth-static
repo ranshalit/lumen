@@ -14,14 +14,23 @@
 
 case "$1" in
     start)
-        # Wait for eth0 link then bring it up — fully non-blocking from boot's POV
+        # Bring eth0 up as early as possible — fully non-blocking from boot's
+        # POV. The link autonegotiates (gigabit) once the interface is opened.
+        #
+        # NOTE: the interface MUST be brought up before the link can come up.
+        # r8168 only powers the PHY and negotiates a link once the netdev is
+        # opened (ifup), so we ifup immediately instead of waiting for the link
+        # first — waiting on operstate before ifup just burns ~30s every boot.
         (
+            # Wait for the eth0 interface to appear (driver probe)
             i=0
-            while [ $i -lt 30 ] && \
-                  [ "$(cat /sys/class/net/eth0/operstate 2>/dev/null)" != "up" ]; do
+            while [ $i -lt 10 ] && [ ! -e /sys/class/net/eth0 ]; do
                 sleep 1
                 i=$((i+1))
             done
+
+            # Open the interface and assign the static IP right away — this is
+            # what powers the PHY and starts link negotiation.
             ifup eth0
         ) &
         ;;
