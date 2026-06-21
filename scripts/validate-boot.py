@@ -9,7 +9,8 @@ Validates that Lumen Linux device booted correctly by checking:
 - Memory subsystem
 - GPU subsystem (if available)
 - Docker engine + Compose V2 plugin
-- NTP (chrony daemon running and tracking)
+- NTP (ntpd daemon running)
+- Tools (rsync, nano, vim, ntpd present)
 - NVIDIA container runtime (config.toml present, runtime registered in dockerd)
 - Boot logs (dmesg for critical errors)
 - BusyBox init health (PID 1, sshd running)
@@ -270,17 +271,28 @@ class BootValidator:
         passed = bool(docker_ver) and compose_ok
         self.check("Docker", passed, f"engine {docker_ver}, compose {compose_ver}")
 
+    def validate_tools(self):
+        """Check that expected CLI tools are installed"""
+        tools = ["rsync", "nano", "vim", "ntpd"]
+        missing = []
+        for tool in tools:
+            rc, _ = self.run_command(f"command -v {tool} >/dev/null 2>&1 && echo OK || echo FAIL")
+            if "OK" not in _:
+                missing.append(tool)
+        passed = len(missing) == 0
+        details = "all present" if passed else f"missing: {', '.join(missing)}"
+        self.check("Tools", passed, details)
+
     def validate_ntp(self):
-        """Check chrony NTP daemon is running"""
-        rc, output = self.run_command("pidof chronyd >/dev/null 2>&1 && echo OK || echo FAIL")
+        """Check ntpd NTP daemon is running"""
+        rc, output = self.run_command("pidof ntpd >/dev/null 2>&1 && echo OK || echo FAIL")
         running = "OK" in output
         if not running:
-            self.check("NTP (chrony)", False, "chronyd not running")
+            self.check("NTP (ntpd)", False, "ntpd not running")
             return
-        # chronyc may not be installed; fall back to checking /var/run/chrony or proc
-        rc2, output2 = self.run_command("ls /var/run/chrony* /run/chrony* 2>/dev/null | sed -n '1p'")
-        details = f"chronyd running, socket {output2.strip()}" if output2.strip() else "chronyd running"
-        self.check("NTP (chrony)", True, details)
+        rc2, output2 = self.run_command("ntpq -p 2>/dev/null | sed -n '3p'")
+        details = f"ntpd running, peers: {output2.strip()}" if output2.strip() else "ntpd running"
+        self.check("NTP (ntpd)", True, details)
 
     def validate_nvidia_runtime(self):
         """Check NVIDIA container runtime is registered and config.toml exists"""
@@ -315,6 +327,7 @@ class BootValidator:
         self.validate_init()
         self.validate_docker()
         self.validate_ntp()
+        self.validate_tools()
         self.validate_nvidia_runtime()
 
         return self.all_passed
