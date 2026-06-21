@@ -25,7 +25,12 @@ IMAGE_INSTALL += " \
     htop \
     i2c-tools \
     util-linux \
-    chrony \
+    rsync \
+    nano \
+    vim \
+    ntp \
+    ntpq \
+    ntpdc \
     docker-moby \
     containerd-opencontainers \
     nvidia-container-toolkit \
