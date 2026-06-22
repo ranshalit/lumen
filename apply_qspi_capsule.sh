@@ -6,10 +6,23 @@
 # HOW IT WORKS
 #   Orin's boot firmware lives in the QSPI-NOR chip and is NOT exposed as an MTD
 #   device under Linux, so it cannot be dd'd. The only supported in-field write is
-#   a UEFI Capsule Update. This board's kernel has CONFIG_EFI_CAPSULE_LOADER=y, so
-#   we hand the capsule to UEFI through /dev/efi_capsule_loader and reboot; UEFI
-#   writes the inactive QSPI A/B slot on the next boot and (on success) flips the
-#   active slot.
+#   a UEFI Capsule Update. On Orin the *runtime* path (/dev/efi_capsule_loader)
+#   returns EINVAL — UEFI does NOT advertise the FILE_CAPSULE_DELIVERY bit
+#   (OsIndicationsSupported lacks 0x04). The ONLY working Linux path is
+#   "capsule-on-disk":
+#     1. mount the active bootloader slot's EFI System Partition (ESP),
+#     2. copy the signed capsule to <ESP>/EFI/UpdateCapsule/,
+#     3. set the OsIndications EFI variable bit 0x04 (process-capsule-on-disk),
+#     4. reboot — UEFI scans \EFI\UpdateCapsule\ early in the next boot, writes the
+#        inactive QSPI A/B slot, flips the active slot, and clears OsIndications.
+#   (Reference: NVIDIA nv_bootloader_capsule_updater.sh.)
+#
+# REQUIREMENTS ON THE DEVICE
+#   - UEFI built with CONFIG_FIRMWARE_CAPSULE_SUPPORTED=y (edk2-boot-strip.cfg).
+#     Verify: OsIndicationsSupported reads 0x45 (gains bit 0x04). Without this the
+#     capsule is silently ignored (UEFI just clears the var).
+#   - vfat/fat kernel modules to mount the ESP (kernel-module-vfat +
+#     kernel-module-fat are in lumen-image-minimal.bb).
 #
 # PROOF THAT *OUR* FIRMWARE WAS APPLIED (not just "already there")
 #   We snapshot, before and after, three values that only move if a capsule was
@@ -50,8 +63,18 @@ CONNECT_TIMEOUT="${CONNECT_TIMEOUT:-10}"
 # Where the capsule is staged on the device before loading.
 REMOTE_CAP="${REMOTE_CAP:-/tmp/tegra-bl.cap}"
 
+# Active-slot ESP block devices (capsule-on-disk target). Slot A=0, B=1.
+ESP_SLOT_A="${ESP_SLOT_A:-/dev/nvme0n1p10}"
+ESP_SLOT_B="${ESP_SLOT_B:-/dev/nvme0n1p13}"
+# Capsule filename under <ESP>/EFI/UpdateCapsule/ (NVIDIA convention).
+ESP_CAP_NAME="${ESP_CAP_NAME:-TEGRA_BL.Cap}"
+OSIND_VAR="OsIndications-8be4df61-93ca-11d2-aa0d-00e098032b8c"
+
 # Auto-discover the capsule under the deploy dir unless --cap / CAP overrides it.
 IMAGES_BASE="${IMAGES_BASE:-build/tmp/deploy/images}"
+# Where to find prebuilt fat.ko / vfat.ko if the device rootfs lacks vfat (e.g. a
+# not-yet-updated rootfs). Searched by the device's running kernel release.
+MODULES_BASE="${MODULES_BASE:-build/tmp/work}"
 
 ASSUME_YES=0; DO_REBOOT=1; CHECK_ONLY=0; CAP="${CAP:-}"
 while [ $# -gt 0 ]; do
@@ -95,7 +118,27 @@ echo "LAS=$(cat $e/last_attempt_status 2>/dev/null)"
 REMOTE
 }
 
-# ───────────────────────── preflight ─────────────────────────
+# Make sure the device can mount a vfat ESP. The updated lumen image ships
+# kernel-module-fat/vfat, but a not-yet-updated rootfs may lack them — in that
+# case push the matching prebuilt .ko's from the build and insmod them.
+ensure_vfat(){
+  if dssh "sudo -n sh -c 'modprobe vfat 2>/dev/null; grep -qw vfat /proc/filesystems'"; then
+    echo "vfat available on device"
+    return 0
+  fi
+  echo "vfat not available on device — pushing modules from $MODULES_BASE"
+  local krel fatko vfatko
+  krel="$(dssh "uname -r" | tr -d '\r')"
+  [ -n "$krel" ] || die "could not read device kernel release"
+  fatko="$(find "$MODULES_BASE" -path "*/lib/modules/$krel/kernel/fs/fat/fat.ko" 2>/dev/null | head -1)"
+  vfatko="$(find "$MODULES_BASE" -path "*/lib/modules/$krel/kernel/fs/fat/vfat.ko" 2>/dev/null | head -1)"
+  [ -f "$fatko" ] && [ -f "$vfatko" ] || \
+    die "fat.ko/vfat.ko for kernel $krel not found under $MODULES_BASE — build the image first"
+  dscp "$fatko" "$vfatko" "$USER@$IP:/tmp/" >/dev/null
+  dssh "sudo -n sh -c 'insmod /tmp/fat.ko 2>/dev/null; insmod /tmp/vfat.ko 2>/dev/null; grep -qw vfat /proc/filesystems'" \
+    || die "failed to load vfat module on device (vermagic mismatch?)"
+  echo "vfat module loaded on device (fat.ko + vfat.ko)"
+}
 log "preflight"
 for t in sshpass ssh scp; do command -v "$t" >/dev/null || die "missing host tool: $t"; done
 ping -c1 -W2 "$IP" >/dev/null 2>&1 || die "device $IP not reachable"
@@ -137,17 +180,75 @@ if [ "$ASSUME_YES" = 0 ]; then
   read -r ans; [ "$ans" = "YES" ] || die "aborted by user (QSPI untouched)"
 fi
 
-# Hand the capsule to UEFI via the kernel capsule loader. A non-zero write here
-# means the kernel/UEFI rejected the capsule (bad signature, version, or GUID) —
-# QSPI is untouched, so just report and stop.
-log "loading capsule into /dev/efi_capsule_loader"
-if ! dsudo "cat $REMOTE_CAP > /dev/efi_capsule_loader"; then
-  die "kernel rejected the capsule (check signature/version/GUID). QSPI untouched."
+# Make sure the ESP is mountable (push vfat modules to an old rootfs if needed).
+log "ensuring vfat is available (to mount the ESP)"
+ensure_vfat
+
+# Stage the capsule on the active slot's ESP and arm OsIndications.
+#
+# We do NOT trust the heredoc's exit code: writing to efivarfs can return a
+# spurious non-zero even when the variable was set correctly. Instead the
+# remote script READS BACK its own work and prints sentinel lines
+# (STAGED_CAP_OK / OSIND_ARMED_OK) only after verifying the end-state; the host
+# then keys success off those sentinels. QSPI is untouched until the next boot.
+log "staging capsule-on-disk (mount active ESP -> EFI/UpdateCapsule, arm OsIndications)"
+STAGE_OUT="$(dssh "sudo -n sh -s '$REMOTE_CAP' '$ESP_SLOT_A' '$ESP_SLOT_B' '$ESP_CAP_NAME' '$OSIND_VAR' '$L_SHA'" <<'REMOTE' 2>&1 || true
+REMOTE_CAP="$1"; ESP_SLOT_A="$2"; ESP_SLOT_B="$3"; ESP_CAP_NAME="$4"; OSIND_VAR="$5"; WANT_SHA="$6"
+
+modprobe fat 2>/dev/null || true
+modprobe vfat 2>/dev/null || true
+
+slot=$(nvbootctrl -t bootloader get-current-slot 2>/dev/null || echo 0)
+case "$slot" in
+  1) esp="$ESP_SLOT_B" ;;
+  *) esp="$ESP_SLOT_A" ;;
+esac
+echo "active bootloader slot: $slot -> ESP $esp"
+[ -b "$esp" ] || { echo "ESP block device $esp not found" >&2; exit 0; }
+
+mnt=$(mktemp -d)
+trap 'umount "$mnt" 2>/dev/null || true; rmdir "$mnt" 2>/dev/null || true' EXIT
+mount -t vfat "$esp" "$mnt" || { echo "failed to mount $esp (vfat)" >&2; exit 0; }
+
+mkdir -p "$mnt/EFI/UpdateCapsule"
+cp "$REMOTE_CAP" "$mnt/EFI/UpdateCapsule/$ESP_CAP_NAME"
+sync
+# read back the staged capsule and verify its sha before declaring success
+got=$(sha256sum "$mnt/EFI/UpdateCapsule/$ESP_CAP_NAME" 2>/dev/null | cut -d' ' -f1)
+umount "$mnt"; rmdir "$mnt"; trap - EXIT
+if [ "$got" = "$WANT_SHA" ]; then
+  echo "capsule placed at <ESP>/EFI/UpdateCapsule/$ESP_CAP_NAME (sha verified)"
+  echo "STAGED_CAP_OK"
+else
+  echo "staged capsule sha mismatch on ESP (got=$got want=$WANT_SHA)" >&2
+  exit 0
 fi
-echo "capsule accepted by kernel"
+
+# Arm capsule-on-disk: OsIndications bit 0x04 (PROCESS_CAPSULE_ON_DISK).
+# efivarfs layout = 4-byte attributes (NV|BS|RT = 0x07) + 8-byte LE value.
+var="/sys/firmware/efi/efivars/$OSIND_VAR"
+[ -e "$var" ] && chattr -i "$var" 2>/dev/null || true
+printf '\007\000\000\000\004\000\000\000\000\000\000\000' > "$var" 2>/dev/null || true
+# read back: byte index 4 (first value byte) must have the 0x04 bit set
+val=$(od -An -tx1 "$var" 2>/dev/null | tr -s ' ' | sed 's/^ //')
+b4=$(echo "$val" | cut -d' ' -f5)
+# robust bit test: parse hex, AND with 0x04
+if [ -n "$b4" ] && [ $(( 0x$b4 & 0x04 )) -ne 0 ]; then
+  echo "OsIndications armed (process-capsule-on-disk = 0x04); efivar bytes: $val"
+  echo "OSIND_ARMED_OK"
+else
+  echo "OsIndications readback does not show bit 0x04 (bytes: $val)" >&2
+  exit 0
+fi
+REMOTE
+)"
+echo "$STAGE_OUT"
+printf '%s\n' "$STAGE_OUT" | grep -q STAGED_CAP_OK  || die "capsule was not staged on the ESP. QSPI untouched."
+printf '%s\n' "$STAGE_OUT" | grep -q OSIND_ARMED_OK || die "OsIndications could not be armed. QSPI untouched."
+echo "capsule staged + OsIndications armed (verified by readback)"
 
 if [ "$DO_REBOOT" = 0 ]; then
-  log "--no-reboot set — capsule is queued. Reboot the device to apply, then re-run with --check."
+  log "--no-reboot set — capsule is staged on the ESP and OsIndications is armed. Reboot the device to apply, then re-run with --check."
   exit 0
 fi
 
@@ -170,7 +271,18 @@ echo "active slot : $B_ACTIVE -> $A_ACTIVE"
 echo "last_attempt_version : $A_LAV"
 echo "last_attempt_status  : $A_LAS  (0 == success)"
 ok=1
-if [ -n "$A_LAS" ] && [ "$A_LAS" != "0" ]; then echo "  -> UEFI reported a FAILED capsule apply"; ok=0; fi
+if [ -n "$A_LAS" ] && [ "$A_LAS" != "0" ]; then
+  echo "  -> UEFI reported a FAILED capsule apply"
+  if [ "$A_LAS" = "6151" ]; then
+    echo "     0x1807 == IMAGE_NOT_IN_PACKAGE: the capsule's image TnSpec does not"
+    echo "     match the device. This happens when the QSPI firmware was flashed for"
+    echo "     a DIFFERENT product (its locked TegraPlatformSpec / TegraPlatformCompatSpec"
+    echo "     UEFI variables differ from this build's MACHINE). Confirm the device runs"
+    echo "     THIS product's firmware:"
+    echo "        cat /sys/firmware/efi/efivars/TegraPlatformCompatSpec-* | tr -d '\\0'"
+  fi
+  ok=0
+fi
 if [ "$B_ACTIVE" = "$A_ACTIVE" ]; then
   echo "  -> NOTE: active slot did not flip ($A_ACTIVE). Capsule may have been"
   echo "     skipped (e.g. identical version). Bump the capsule fw-version to force,"

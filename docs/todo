@@ -52,14 +52,52 @@ add to validation; docker, runtime nvidia, ntp
 ================================================================================
 5. QSPI firmware flashing from Linux (over Ethernet, no USB/recovery)
 ================================================================================
-   STATUS: NOT possible on current image — capsule support is compiled OUT of UEFI.
-   Hardware-verified 2026-06: staged a signed capsule on the ESP + set OsIndications
-   0x04; UEFI cleared the var but ignored the capsule (file untouched, ESRT
-   last_attempt_version stayed 0, no A/B slot flip). Runtime path
-   (/dev/efi_capsule_loader) returns EINVAL. Confirmed OsIndicationsSupported=0x41
-   (no 0x04 FILE_CAPSULE_DELIVERY bit).
+   STATUS: ✅ DONE — implemented AND hardware-verified end-to-end (2026-06).
+   Was NOT possible on prior image — capsule support was compiled OUT of UEFI.
 
-   ROOT CAUSE:
+   HARDWARE VERIFICATION (2026-06, lumen-orin-nano-8gb):
+     - Rebuilt UEFI with capsule support; QSPI-flashed lumen firmware via recovery
+       (flash-jetson skill, --qspi-only). OsIndicationsSupported went 0x41 -> 0x45
+       (gained bit 0x04 FILE_CAPSULE_DELIVERY).
+     - Ran apply_qspi_capsule.sh: staged tegra-bl.cap on the active-slot ESP, armed
+       OsIndications 0x04, rebooted. UEFI wrote the inactive QSPI A/B slot, flipped
+       the active slot (A -> B), and booted from it. ESRT reported
+       last_attempt_status=0 (SUCCESS), last_attempt_version=0x240550 (our monotonic
+       capsule version). Re-running is idempotent (no-op success, no flip).
+     - The runtime path (/dev/efi_capsule_loader) returns EINVAL on Orin —
+       capsule-on-disk is the ONLY working Linux path, as implemented.
+
+   DONE IN REPO:
+     ✅ a. edk2-boot-strip.cfg: CONFIG_FIRMWARE_CAPSULE_SUPPORTED=y
+     ✅ c. tegra-uefi-capsules bbappend: CAPSULE_FW_VERSION now MONOTONIC per build
+           (0x240500 + git commit count); --lsv kept at stock 0x240500. Override
+           via CAPSULE_FW_VERSION=... to force re-apply of an unchanged tree.
+     ✅ e. lumen-image-minimal.bb: added kernel-module-fat + kernel-module-vfat so
+           the running OS can mount the ESP (NLS cp437/iso8859-1 already builtin=y).
+     ✅ apply_qspi_capsule.sh rewritten to the WORKING capsule-on-disk method
+           (ensure vfat -> mount active ESP -> EFI/UpdateCapsule -> arm OsIndications
+           -> reboot -> verify ESRT). Verifies staging by sha/efivar READBACK (not
+           heredoc exit code), and auto-pushes fat.ko/vfat.ko to a not-yet-updated
+           rootfs that still lacks the modules.
+
+   GOTCHAS / NOTES for the field:
+     - First capsule-capable UEFI install is itself a QSPI write the OLD (capsule-less)
+       UEFI cannot do from Linux — do ONE recovery-mode flash (flash-jetson --qspi-only)
+       to seed it; afterwards all QSPI updates work from Linux via apply_qspi_capsule.sh.
+     - TnSpec/product lock: TegraPlatformSpec is a NV UEFI var created LOCK_ON_CREATE
+       by the first firmware to boot. If a board was previously flashed with a DIFFERENT
+       product's firmware (e.g. meta-helios), that var stays locked to the old product
+       and a bootloader-only QSPI flash does NOT erase the varstore. The capsule FMP
+       check then fails with last_attempt_status=0x1807 (IMAGE_NOT_IN_PACKAGE) because
+       the package TnSpec doesn't match. The matcher falls back to the NO_LOCK
+       TegraPlatformCompatSpec, so deleting that var (it regenerates from current boot
+       config on next boot) restores a match. A factory lumen-first board is unaffected.
+     - fw_version (ESRT) stays 0x240500: it is read from the VER partition = the L4T
+       BSP version (36.5.0), identical across lumen rebuilds. The monotonic 0x240550 is
+       the CAPSULE header version (last_attempt_version / the UEFI version gate), which
+       is the value that actually advances per build.
+
+   ROOT CAUSE (now fixed):
      meta-lumen/recipes-bsp/uefi/edk2-firmware-tegra/edk2-boot-strip.cfg
        "# CONFIG_FIRMWARE_CAPSULE_SUPPORTED is not set"   <-- capsule stripped out
 

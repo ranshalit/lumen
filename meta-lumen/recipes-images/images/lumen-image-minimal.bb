@@ -39,6 +39,8 @@ IMAGE_INSTALL += " \
     lumen-udev-rules \
     lumen-app \
     lumen-rootfs-resize \
+    kernel-module-fat \
+    kernel-module-vfat \
 "
 
 # Post-install script to create nexus user, configure sudo, and pre-generate SSH host keys
