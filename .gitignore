@@ -17,3 +17,11 @@ meta-openembedded/
 meta-tegra/
 build/
 meta-virtualization/
+
+# eth-flasher staging dir + script backups
+flash-work/
+*.sh.bak
+
+# stray build logs
+nano_rebuild-*.log
+nx16_build.log

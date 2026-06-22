@@ -48,3 +48,78 @@ add to validation; docker, runtime nvidia, ntp
    Deferred:
    - Power-fail-safe atomic image update (stage in versioned dir, atomic symlink swap)
    - Static config.toml instead of generate-config at boot
+
+================================================================================
+5. QSPI firmware flashing from Linux (over Ethernet, no USB/recovery)
+================================================================================
+   STATUS: NOT possible on current image — capsule support is compiled OUT of UEFI.
+   Hardware-verified 2026-06: staged a signed capsule on the ESP + set OsIndications
+   0x04; UEFI cleared the var but ignored the capsule (file untouched, ESRT
+   last_attempt_version stayed 0, no A/B slot flip). Runtime path
+   (/dev/efi_capsule_loader) returns EINVAL. Confirmed OsIndicationsSupported=0x41
+   (no 0x04 FILE_CAPSULE_DELIVERY bit).
+
+   ROOT CAUSE:
+     meta-lumen/recipes-bsp/uefi/edk2-firmware-tegra/edk2-boot-strip.cfg
+       "# CONFIG_FIRMWARE_CAPSULE_SUPPORTED is not set"   <-- capsule stripped out
+
+   TO ENABLE QSPI FLASHING FROM LINUX — do all of:
+
+   a. Re-enable capsule support in UEFI:
+      - edk2-boot-strip.cfg: set CONFIG_FIRMWARE_CAPSULE_SUPPORTED=y
+        (currently commented "is not set"). Rebuild edk2-firmware-tegra.
+      - Verify after install: OsIndicationsSupported gains bit 0x04, i.e. reads 0x45.
+
+   b. Capsule build is already wired up (meta-lumen tegra-uefi-capsules_%.bbappend):
+      - Produces tegra-bl.cap (bootloader/QSPI) and tegra-kernel.cap.
+      - Needed INITRAMFS_IMAGE override (Lumen disables initramfs globally) — keep it.
+
+   c. Decide version-bump policy (see CAPSULE_FW_VERSION in the bbappend):
+      - Currently STATIC 0x240501, baked into EVERY build (not skill/flash-time).
+      - Static value only proves the FIRST apply; repeated reflashes read the same
+        version and UEFI may skip them. For a real update flow, derive
+        CAPSULE_FW_VERSION monotonically (git commit count / date) per build, OR
+        re-sign with a fresh version at flash time in the flashing skill.
+      - Keep --lsv (CAPSULE_LSV) at stock 0x240500 to avoid raising the
+        anti-rollback floor.
+
+   d. Chicken-and-egg: installing the FIRST capsule-capable UEFI is itself a QSPI
+      write, which the current (capsule-less) UEFI cannot do from Linux. The first
+      install MUST go via USB/recovery flashing OR the eth-initrd full-device route
+      (QSPI+NVMe). After that one install, future QSPI updates work from Linux via
+      capsule-on-disk.
+
+   e. Apply mechanism (capsule-on-disk, the ONLY working Linux path on Orin):
+      - Mount active ESP (slot A=/dev/nvme0n1p10, B=/dev/nvme0n1p13; vfat — needs
+        fat.ko+vfat.ko, NOT installed on minimal rootfs; add kernel-module-vfat +
+        kernel-module-fat to the image, or push the .ko's at flash time).
+      - cp tegra-bl.cap to <esp>/EFI/UpdateCapsule/
+      - Set OsIndications: write bytes 07 00 00 00 04 00 00 00 00 00 00 00 to
+        /sys/firmware/efi/efivars/OsIndications-8be4df61-93ca-11d2-aa0d-00e098032b8c
+      - reboot. (Reference: NVIDIA nv_bootloader_capsule_updater.sh.)
+      - The /opt/nvidia/l4t-bootloader-config/nv-l4t-bootloader-config.sh on this
+        image is a STUB (does not mount the ESP) — mount the ESP yourself.
+
+   f. PROOF OF SUCCESS (verification, all UEFI-reported, content-independent):
+      - nvbootctrl dump-slots-info: "Capsule update status" -> 1, A/B slot flips.
+      - ESRT /sys/firmware/efi/esrt/entries/entry0/: last_attempt_status==0 (success)
+        and last_attempt_version == new CAPSULE_FW_VERSION.
+
+   NOTE: re-enabling capsule support adds ~0 to normal boot time (UEFI just reads an
+   EFI var each boot); only the deliberate update boot is longer (one-time QSPI write).
+
+   See also: session checkpoint "QSPI capsule flashing over Ethernet" and
+   apply_qspi_capsule.sh (apply tool — apply mechanism must use capsule-on-disk,
+   not the runtime /dev/efi_capsule_loader path).
+
+   --- recovery partitions (NVMe) ---
+   The eth flasher (flash_eth_initrd.sh, --full-nvme) intentionally SKIPS the
+   recovery / recovery-dtb (and _alt) partitions:
+     - external-flash.xml assigns them NO <filename> (no source image), and the
+       tegraflash package contains no recovery.img — nothing authoritative to write.
+     - They are not used by Lumen's boot path (QSPI->UEFI->ESP->extlinux->rootfs);
+       only NVIDIA recovery/OTA kernel boot uses them.
+   To populate them later: the Yocto build must first emit a real recovery.img
+   (recovery kernel + initramfs). Then add one PARTSPEC row in flash_eth_initrd.sh:
+       PARTSPEC+=("recovery  $SRC/recovery.img  recovery")
+   (plus recovery-dtb if a recovery DTB image is produced).
