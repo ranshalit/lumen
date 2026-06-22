@@ -68,7 +68,8 @@ SSH_PASS="${SSH_PASS:-${DEVICE_SSH_PASS:-$(_envget DEVICE_SSH_PASS)}}"; SSH_PASS
 
 ROOT_DEV="${ROOT_DEV:-/dev/nvme0n1p1}"          # rootfs partition (read source from here; APP target)
 EXTLINUX="${EXTLINUX:-/boot/extlinux/extlinux.conf}"
-MODULES="${MODULES:-}"                           # storage modules for the initrd (none on Lumen: NVMe built-in)
+MODULES="${MODULES:-auto}"                       # initrd storage modules: "auto" = probe device (Lumen NVMe is built-in -> none); "" = force none; "m1 m2" = explicit list
+KERNEL_DTB="${KERNEL_DTB:-}"                      # kernel devicetree filename; "" = auto-derive from the tegraflash package (per-machine; do NOT hardcode)
 
 # rootfs image: auto-discover *.rootfs.ext4 under build/tmp/deploy/images/**, or set IMAGE=
 IMAGES_BASE="${IMAGES_BASE:-build/tmp/deploy/images}"
@@ -159,6 +160,26 @@ MEM_AVAIL_KB="$(dssh "sed -n 's/^MemAvailable:[ \t]*\([0-9]*\).*/\1/p' /proc/mem
 echo "device MemAvailable : $((MEM_AVAIL_KB/1024)) MiB"
 dssh "mount | grep ' / '" || true
 
+# Auto-detect storage modules for the flasher initrd. "auto" probes the device and
+# bundles the NVMe/PCIe chain ONLY where those drivers are loadable modules (Lumen
+# builds them into the kernel -> nothing to bundle; other machines may build them
+# as modules). MODULES="" forces none; MODULES="m1 m2" forces an explicit list.
+if [ "$MODULES" = "auto" ]; then
+  MODULES="$(dssh '
+    is_mod(){ f=$(modinfo -F filename "$1" 2>/dev/null | tr -d "\r"); [ -n "$f" ] && [ "$f" != "(builtin)" ]; }
+    out=""
+    for m in phy-tegra194-p2u pcie-tegra194 nvme_core nvme; do
+      is_mod "$m" && out="$out $m"
+    done
+    echo $out
+  ' | tr -d '\r' | xargs || true)"
+  if [ -n "$MODULES" ]; then
+    echo "storage modules     : loadable -> initrd will bundle: $MODULES"
+  else
+    echo "storage modules     : built into kernel (Lumen-style) -> none bundled"
+  fi
+fi
+
 # Staging dir on the device's rootfs (read back by the initrd after mounting root).
 if [ "$SSH_USER" = "root" ]; then STAGE_DIR="/flash"; else STAGE_DIR="/home/$SSH_USER/flash"; fi
 dssh "mkdir -p $STAGE_DIR"
@@ -170,8 +191,14 @@ resolve_partlabel(){ dssh "readlink -f /dev/disk/by-partlabel/$1" | tr -d '\r'; 
 SRC="$WORK/src"; mkdir -p "$SRC"
 if [ "$SCOPE" = "full-nvme" ]; then
   log "Step 2: extract ESP / kernel / dtb from tegraflash package"
-  DTB_NAME="$(tar xzOf "$TEGRAFLASH_TGZ" doexternal.sh 2>/dev/null | grep -oE 'tegra234-p3768[^ ]+\.dtb' | head -1)"
-  [ -n "$DTB_NAME" ] || DTB_NAME="tegra234-p3768-0000+p3767-0003-nv-super.dtb"
+  # The kernel devicetree is the .dtb argument on the tegra-flash-helper.sh command
+  # line in doexternal.sh — authoritative and per-machine (e.g. Lumen/Orin
+  # tegra234-p3768-...-nv-super.dtb, hadron tegra234-orin-nano-cti-NGX012.dtb). The
+  # many tegra234-bpmp-*.dtb in the package are NOT on that line, so this picks the
+  # one real kernel dtb. Override with KERNEL_DTB=<name> if ever needed.
+  DTB_NAME="$KERNEL_DTB"
+  [ -n "$DTB_NAME" ] || DTB_NAME="$(tar xzOf "$TEGRAFLASH_TGZ" doexternal.sh 2>/dev/null | grep -oE '[A-Za-z0-9._+-]+\.dtb' | head -1)"
+  [ -n "$DTB_NAME" ] || die "could not determine kernel DTB from tegraflash package (no .dtb on doexternal.sh's flash-helper line). Set KERNEL_DTB=<name>."
   ( cd "$SRC" && tar xzf "$TEGRAFLASH_TGZ" boot.img esp.img "$DTB_NAME" )
   [ -f "$SRC/boot.img" ] || die "boot.img missing from tegraflash package"
   [ -f "$SRC/esp.img" ]  || die "esp.img missing from tegraflash package"
