@@ -8,6 +8,7 @@ Validates that Lumen Linux device booted correctly by checking:
 - Storage subsystem (root filesystem, /boot)
 - Memory subsystem
 - GPU subsystem (if available)
+- nvgpu kernel module (Tegra GPU driver loaded)
 - Docker engine + Compose V2 plugin
 - NTP (ntpd daemon running)
 - Tools (rsync, nano, vim, ntpd present)
@@ -195,6 +196,29 @@ class BootValidator:
         else:
             self.check("GPU", True, "no NVIDIA devices", skip=True)
 
+    def validate_nvgpu_module(self):
+        """Check that the Tegra nvgpu kernel module is loaded (and not erroring)"""
+        rc, output = self.run_command("lsmod | awk '$1==\"nvgpu\"{print $1\" \"$2}'")
+        if rc != 0 or not output.strip():
+            self.check("nvgpu Module", False, "nvgpu kernel module not loaded")
+            return
+        mod_line = output.strip()
+
+        # Quick sanity-check dmesg for nvgpu probe failures.
+        rc2, output2 = self.run_command(
+            "sudo dmesg 2>/dev/null | grep -iE 'nvgpu.*(error|fail|panic)' | wc -l"
+        )
+        try:
+            err_count = int(output2.strip())
+        except ValueError:
+            err_count = 0
+
+        passed = err_count == 0
+        details = f"loaded ({mod_line})"
+        if err_count:
+            details += f", {err_count} dmesg error(s)"
+        self.check("nvgpu Module", passed, details)
+
     def validate_boot_logs(self):
         """Check dmesg for critical errors"""
         rc, output = self.run_command("sudo dmesg 2>/dev/null | wc -l")
@@ -274,10 +298,18 @@ class BootValidator:
     def validate_tools(self):
         """Check that expected CLI tools are installed"""
         tools = ["rsync", "nano", "vim", "ntpd"]
+        # Also probe common system paths since non-interactive shells often
+        # have $PATH limited to /usr/bin:/bin (missing /usr/sbin where ntpd lives).
+        sbin_paths = ["/usr/sbin", "/sbin", "/usr/local/sbin", "/usr/local/bin"]
         missing = []
         for tool in tools:
-            rc, _ = self.run_command(f"command -v {tool} >/dev/null 2>&1 && echo OK || echo FAIL")
-            if "OK" not in _:
+            rc, out = self.run_command(f"command -v {tool} >/dev/null 2>&1 && echo OK || echo FAIL")
+            if "OK" in out:
+                continue
+            # Fallback: look in sbin-style directories explicitly.
+            probe = " || ".join(f"test -x {p}/{tool}" for p in sbin_paths)
+            rc2, out2 = self.run_command(f"({probe}) && echo OK || echo FAIL")
+            if "OK" not in out2:
                 missing.append(tool)
         passed = len(missing) == 0
         details = "all present" if passed else f"missing: {', '.join(missing)}"
@@ -322,6 +354,7 @@ class BootValidator:
         self.validate_storage()
         self.validate_memory()
         self.validate_gpu()
+        self.validate_nvgpu_module()
         self.validate_rtc()
         self.validate_boot_logs()
         self.validate_init()
