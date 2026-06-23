@@ -13,16 +13,13 @@ add to validation; docker, runtime nvidia, ntp
    ✅ bootlogd + dmesg.sh removed from rcS
    ✅ A/B verifier (userspace) made non-blocking
    ✅ Ethernet deferred to after login prompt
-   ✅ Docker + lumen-app init scripts made non-blocking (commit 852177d)
-   ✅ S06modutils.sh deferred — nvgpu/nvmap/pwm-fan/ina3221 load via inittab
-     `mod:5:once:` instead of blocking rcS; ~2-3s saving to prompt (nvgpu probe
-     was the largest userspace blocker right before getty)
 
    Remaining (in priority order):
-   ❌ #1 Make nvidia-container-setup (S50) non-blocking — runs before login, can defer
-   ❌ #2 Profile pre-kernel time: run `cat /proc/tegra_boot_times` on board to see MB1/MB2/UEFI split
-   ❌ #3 Audit nvstartup (priority 00 in rcS) — runs first, check if it blocks
-   ❌ #4 Disable A/B slot check in MB2 bootloader (we always reflash, ~50-100ms saving)
+   ❌ #1 Make Docker + containerd init scripts non-blocking (background &) — est. 2-4s saving
+   ❌ #2 Make nvidia-container-setup (S50) non-blocking — runs before login, can defer
+   ❌ #3 Profile pre-kernel time: run `cat /proc/tegra_boot_times` on board to see MB1/MB2/UEFI split
+   ❌ #4 Audit nvstartup (priority 00 in rcS) — runs first, check if it blocks
+   ❌ #5 Disable A/B slot check in MB2 bootloader (we always reflash, ~50-100ms saving)
 
    Note: Docker start can be deferred — app inside container tolerates waiting for its own
    dependencies, so login prompt does not need to wait for Docker to be ready.

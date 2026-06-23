@@ -38,10 +38,6 @@ Same pattern used for Ethernet deferral (commit `1559a73`):
 
 ### Status
 
-- [x] Implement `modutils-initscripts_%.bbappend` to suppress rcS.d/S06modutils.sh
-      (uses `INHIBIT_UPDATERCD_BBCLASS = "1"` — `inherit update-rc.d` in the
-      upstream recipe registers the symlink via pkg_postinst, so removing it in
-      `do_install` would race against the bbclass; inhibiting the bbclass is the
-      clean fix.)
-- [x] Add `mod:5:once` entry to `sysvinit-inittab_%.bbappend`
-- [ ] Build and measure prompt-time improvement
+- [ ] Implement `modutils_%.bbappend` to remove `S06modutils.sh` from `rcS.d`
+- [ ] Add `mod:5:once` entry to `sysvinit-inittab_%.bbappend`
+- [ ] Build and measure prompt time improvement
