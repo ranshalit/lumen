@@ -11,34 +11,63 @@
 # Triggered via inittab `once` entry after getty spawns — runs concurrently
 # with the login prompt so it never delays the boot path.
 # lo (loopback) is handled automatically by the kernel; no ifup lo needed.
+#
+# IP address MUST match /etc/network/interfaces (kept for manual `ifup` use).
+
+IFACE=eth0
+IP=192.0.5.10
+CIDR=24
 
 case "$1" in
     start)
-        # Bring eth0 up as early as possible — fully non-blocking from boot's
-        # POV. The link autonegotiates (gigabit) once the interface is opened.
+        # Fast link-up + static IP without ifup overhead.
         #
-        # NOTE: the interface MUST be brought up before the link can come up.
-        # r8168 only powers the PHY and negotiates a link once the netdev is
-        # opened (ifup), so we ifup immediately instead of waiting for the link
-        # first — waiting on operstate before ifup just burns ~30s every boot.
+        # Why direct `ip` + `ethtool` instead of `ifup`:
+        #   - busybox `ifup` adds ~1s of post-link-up busywork (operstate
+        #     polling, route setup, etc.) on this device
+        #   - ethtool tweaks fire WHILE the initial autoneg cycle is still in
+        #     its FLP exchange phase; they abort it and restart with the
+        #     correct (faster) configuration:
+        #       * advertise=100baseT/Full only → skips 1000BASE-T training
+        #         cycle (saves ~1s on Realtek r8168)
+        #       * EEE off → skips Low-Power-Idle negotiation pages
+        #       * flow-control pause off → one less negotiation page
+        #
+        # Measured win: ~0.4s mean (up to 1s) end-to-end boot-to-ping vs
+        # `ifup eth0` with default 1G autoneg. See checkpoint
+        # 001-instrumenting-lumen-boot-to-ping-timeline.
+        #
+        # NOTE: ethtool calls MUST fire AFTER `ip link set $IFACE up`.
+        # Empirically, configuring the PHY while admin-down does NOT reliably
+        # apply on the next link-up cycle — it regresses to default 1G
+        # autoneg (~3.1s) instead of 100M-only (~2.1s).
         (
-            # Wait for the eth0 interface to appear (driver probe)
+            # Wait for the interface to appear (driver probe via udev)
             i=0
-            while [ $i -lt 10 ] && [ ! -e /sys/class/net/eth0 ]; do
-                sleep 1
+            while [ $i -lt 100 ] && [ ! -e /sys/class/net/$IFACE ]; do
+                sleep 0.05
                 i=$((i+1))
             done
 
-            # Open the interface and assign the static IP right away — this is
-            # what powers the PHY and starts link negotiation.
-            ifup eth0
+            ip link set $IFACE up
+            ethtool --set-eee $IFACE eee off 2>/dev/null
+            ethtool -A $IFACE autoneg off rx off tx off 2>/dev/null
+            ethtool -s $IFACE advertise 0x008 2>/dev/null
+
+            # Wait for link partner (carrier=1) then assign the static IP
+            while [ "$(cat /sys/class/net/$IFACE/carrier 2>/dev/null)" != "1" ]; do
+                sleep 0.05
+            done
+
+            ip addr add $IP/$CIDR dev $IFACE 2>/dev/null || true
         ) &
         ;;
     stop)
-        ifdown eth0 2>/dev/null || true
+        ip link set $IFACE down 2>/dev/null || true
         ;;
     *)
         echo "Usage: $0 {start|stop}"
         exit 1
         ;;
 esac
+

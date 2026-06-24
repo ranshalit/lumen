@@ -15,6 +15,10 @@ RCONFLICTS:${PN} += "init-ifupdown"
 RREPLACES:${PN} += "init-ifupdown"
 RPROVIDES:${PN} += "init-ifupdown"
 
+# The init script uses ethtool to tune the PHY at link-up (skip 1000BASE-T
+# training cycle, disable EEE/pause negotiation pages) for faster boot-to-ping.
+RDEPENDS:${PN} += "ethtool"
+
 SRC_URI = "file://interfaces file://lumen-eth-static"
 
 S = "${WORKDIR}"
