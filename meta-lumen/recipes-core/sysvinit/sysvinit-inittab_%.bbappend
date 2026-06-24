@@ -1,10 +1,5 @@
-# Defer Ethernet bring-up to after the login prompt.
-# Fires concurrently with getty when entering runlevel 5 — prompt wins the
-# race to the terminal, eth0 comes up a second or two later in the background.
-# lo (loopback) is handled automatically by the kernel (127.0.0.1 always up).
-
-do_install:append() {
-    echo "" >> ${D}${sysconfdir}/inittab
-    echo "# Ethernet: deferred to after prompt (non-blocking)" >> ${D}${sysconfdir}/inittab
-    echo "eth0:5:once:/etc/init.d/lumen-eth-static start" >> ${D}${sysconfdir}/inittab
-}
+# Ethernet bring-up moved from inittab `once @ runlevel 5` to rcS.d/S07
+# (see lumen-eth-static.bb). Firing early lets autoneg overlap with the
+# rest of rcS work, saving ~2s of boot-to-ping time. This bbappend is
+# intentionally empty — kept as a placeholder so removing it later doesn't
+# silently reintroduce a stale inittab entry on upgrade.

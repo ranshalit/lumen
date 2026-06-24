@@ -34,6 +34,15 @@ do_install() {
     install -d ${D}${sysconfdir}/init.d
     install -m 0755 ${WORKDIR}/lumen-eth-static \
         ${D}${sysconfdir}/init.d/lumen-eth-static
+
+    # Run early in rcS.d (S07, just after S06modutils loads r8168) so the
+    # script's background subshell can wait for /sys/class/net/eth0 and
+    # start autoneg in parallel with the rest of rcS — this overlaps the
+    # ~3s autoneg phase with the ~5s of remaining rcS work, saving ~2s
+    # vs the previous "fire after runlevel 5 entry" approach.
+    install -d ${D}${sysconfdir}/rcS.d
+    ln -sf ../init.d/lumen-eth-static \
+        ${D}${sysconfdir}/rcS.d/S07lumen-eth-static
 }
 
-FILES:${PN} += "${sysconfdir}/network/interfaces ${sysconfdir}/init.d/lumen-eth-static"
+FILES:${PN} += "${sysconfdir}/network/interfaces ${sysconfdir}/init.d/lumen-eth-static ${sysconfdir}/rcS.d/S07lumen-eth-static"
