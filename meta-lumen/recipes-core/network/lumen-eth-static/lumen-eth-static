@@ -54,9 +54,16 @@ case "$1" in
             ethtool -A $IFACE autoneg off rx off tx off 2>/dev/null
             ethtool -s $IFACE advertise 0x008 2>/dev/null
 
-            # Wait for link partner (carrier=1) then assign the static IP
-            while [ "$(cat /sys/class/net/$IFACE/carrier 2>/dev/null)" != "1" ]; do
+            # Wait for link partner (carrier=1) then assign the static IP.
+            # Bounded to ~10s (200 * 0.05s): 100M-only autoneg settles in
+            # ~2-2.6s on the r8168, so this never trips on the normal path and
+            # adds zero boot-to-ping time. On a missing/late link it stops the
+            # 20Hz busy-poll and assigns the IP anyway, so a cable plugged in
+            # later still works.
+            i=0
+            while [ "$(cat /sys/class/net/$IFACE/carrier 2>/dev/null)" != "1" ] && [ $i -lt 200 ]; do
                 sleep 0.05
+                i=$((i+1))
             done
 
             ip addr add $IP/$CIDR dev $IFACE 2>/dev/null || true

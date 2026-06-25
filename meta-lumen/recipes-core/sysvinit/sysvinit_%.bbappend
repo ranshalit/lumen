@@ -5,11 +5,14 @@
 # boot. util-linux hwclock --hctosys waits ~1.0s for the RTC second-edge, and
 # the default boot path runs it TWICE: once via bootmisc.sh's internal call
 # (`/etc/init.d/hwclock.sh start`) and again via S40hwclock.sh. Disabling both
-# saves ~1.86s of serial rcS time (measured).
+# saves ~2.6s of serial rcS time (measured).
 # Trade-off: system time tracks NTP from S20ntpd instead of RTC. This board
 # already runs NTP (rc5.d/S20ntpd), so RTC sync at boot is redundant for our
 # use case. Acceptable as long as boot does not require accurate wall-clock
 # time before NTP locks (~rc5).
+# Note: this also skips hwclock.sh's `stop` (systohc) at shutdown, so the NTP-
+# corrected time is no longer written back to the RTC — the RTC may drift over
+# power cycles. Harmless here because NTP re-syncs on every boot.
 
 do_install:append() {
     rm -f ${D}${sysconfdir}/init.d/bootlogd
@@ -21,7 +24,7 @@ do_install:append() {
     rm -f ${D}${sysconfdir}/rc5.d/S99stop-bootlogd
     rm -f ${D}${sysconfdir}/default/volatiles/01_bootlogd
 
-    echo "# Disable RTC <-> system-clock sync at boot (saves ~1.86s)." \
+    echo "# Disable RTC <-> system-clock sync at boot (saves ~2.6s)." \
         >> ${D}${sysconfdir}/default/rcS
     echo "HWCLOCKACCESS=no" >> ${D}${sysconfdir}/default/rcS
 }
