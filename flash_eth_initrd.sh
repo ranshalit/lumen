@@ -158,6 +158,15 @@ log "Step 1: recon"
 MEM_AVAIL_KB="$(dssh "sed -n 's/^MemAvailable:[ \t]*\([0-9]*\).*/\1/p' /proc/meminfo")"
 [ -n "$MEM_AVAIL_KB" ] || MEM_AVAIL_KB=0
 echo "device MemAvailable : $((MEM_AVAIL_KB/1024)) MiB"
+# /tmp is tmpfs and bounds the chunk-reassembly buffer used by eth_transfer.py.
+# If /tmp is smaller than RAM, use it as the gzip threshold so a sparse raw image
+# bigger than /tmp gets compressed on the host before upload.
+TMP_AVAIL_KB="$(dssh "df -kP /tmp | awk 'NR==2{print \$4}'" | tr -dc '0-9')"
+[ -n "$TMP_AVAIL_KB" ] || TMP_AVAIL_KB=0
+echo "device /tmp free    : $((TMP_AVAIL_KB/1024)) MiB"
+if [ "$TMP_AVAIL_KB" -gt 0 ] && [ "$TMP_AVAIL_KB" -lt "$MEM_AVAIL_KB" ]; then
+  MEM_AVAIL_KB="$TMP_AVAIL_KB"
+fi
 dssh "mount | grep ' / '" || true
 
 # Auto-detect storage modules for the flasher initrd. "auto" probes the device and
