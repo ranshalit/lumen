@@ -26,6 +26,7 @@ IMAGE_INSTALL += " \
     i2c-tools \
     util-linux \
     rsync \
+    python3 \
     nano \
     vim \
     ntp \
