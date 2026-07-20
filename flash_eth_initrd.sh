@@ -146,7 +146,10 @@ if [ "$SCOPE" = "full-nvme" ]; then
   [ -n "$TEGRAFLASH_TGZ" ] && [ -f "$TEGRAFLASH_TGZ" ] || die "tegraflash package not found (needed for ESP/kernel/dtb). Set TEGRAFLASH_TGZ=<path> or use --rootfs-only"
   TEGRAFLASH_TGZ="$(readlink -f "$TEGRAFLASH_TGZ")"
 fi
-ping -c1 -W2 "$DEVICE_IP" >/dev/null || die "device $DEVICE_IP not reachable"
+# Some networks block ICMP while SSH is allowed; treat ping as best-effort only.
+if ! ping -c1 -W2 "$DEVICE_IP" >/dev/null; then
+  echo "WARNING: ping to $DEVICE_IP failed; continuing with SSH connectivity check."
+fi
 ssh-keygen -R "$DEVICE_IP" -f "${HOME}/.ssh/known_hosts" 2>/dev/null || true
 ssh_ready || die "cannot SSH as $SSH_USER@$DEVICE_IP (check creds / .env DEVICE_SSH_USER/PASS)"
 echo "rootfs image : $IMAGE  ($(du -h "$RAW_IMG" | cut -f1))"
