@@ -40,6 +40,8 @@ IMAGE_INSTALL += " \
     lumen-udev-rules \
     lumen-app \
     lumen-rootfs-resize \
+    kernel-module-usbserial \
+    kernel-module-ftdi-sio \
     kernel-module-fat \
     kernel-module-vfat \
 "
