@@ -52,6 +52,16 @@ rootfs_postinstall_lumen() {
     
     # Create home directory
     mkdir -p ${IMAGE_ROOTFS}/home/nexus
+
+    # Shell init: system-wide profile.d snippet + nexus ~/.bashrc
+    # (Ubuntu-era users had a Debian-style .bashrc; we ship a Yocto-appropriate
+    # equivalent with the same day-to-day feel: aliases, colored PS1, history.)
+    install -d -m 0755 ${IMAGE_ROOTFS}${sysconfdir}/profile.d
+    install -m 0644 ${LUMEN_IMAGE_FILES}/lumen-profile.sh \
+        ${IMAGE_ROOTFS}${sysconfdir}/profile.d/lumen.sh
+    install -m 0644 ${LUMEN_IMAGE_FILES}/nexus.bashrc \
+        ${IMAGE_ROOTFS}/home/nexus/.bashrc
+
     chown -R 1000:1000 ${IMAGE_ROOTFS}/home/nexus
     chmod 755 ${IMAGE_ROOTFS}/home/nexus
     
@@ -70,6 +80,8 @@ rootfs_postinstall_lumen() {
     echo 'nexus ALL=(ALL) NOPASSWD: ALL' >> ${IMAGE_ROOTFS}/etc/sudoers.d/nexus
     chmod 440 ${IMAGE_ROOTFS}/etc/sudoers.d/nexus
 }
+
+LUMEN_IMAGE_FILES = "${THISDIR}/files"
 
 ROOTFS_POSTINSTALL_COMMAND:append:lumen = "rootfs_postinstall_lumen; "
 
