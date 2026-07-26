@@ -32,7 +32,12 @@ do_compile:append:lumen() {
         dtc -I dtb -O dts -o "$dts" "$dtb" || { bberror "lumen: dtc decompile failed: $dtb"; continue; }
 
         # A — UART: enable serial@3110000, switch compatible, add reset-names
-        sed -i '/serial@3110000 {/,/\};/ s/compatible = "nvidia,tegra234-uart"[^;]*/compatible = "nvidia,tegra194-hsuart"/' "$dts"
+        # NOTE: dtc decompiles a multi-string compatible as a single \0-joined string
+        # ("nvidia,tegra234-uart\0nvidia,tegra20-uart"), so an anchored '..."[^;]*' pattern
+        # never matches. Replace the whole compatible line inside the block instead — this
+        # switches the port from the tegra 8250 driver (ttyS*) to serial-tegra hsuart (ttyTHS*),
+        # which is also what makes the UART honour the PIO (dmas-removed) setting.
+        sed -i '/serial@3110000 {/,/\};/ s/^\([[:space:]]*\)compatible = .*/\1compatible = "nvidia,tegra194-hsuart";/' "$dts"
         sed -i '/serial@3110000 {/,/\};/ s/status = "disabled";/status = "okay";/' "$dts"
 
         if grep -q 'serial@3110000' "$dts" && \
@@ -46,6 +51,13 @@ do_compile:append:lumen() {
 
         # B — Serial aliases: serial2=ttyTHS0, serial3=ttyTHS1
         sed -i 's|serial2 = "/bus@0/serial@3140000";|serial2 = "/bus@0/serial@3110000";\n\t\tserial3 = "/bus@0/serial@3140000";|' "$dts"
+
+        # A2 — UART DMA fix: force PIO mode on serial@3100000 (ttyTHS1) and serial@3110000 (ttyTHS2).
+        # JetPack 6.2.2 / L4T R36.5 serial-tegra DMA corrupts RX/TX data; removing dmas/dma-names
+        # makes the driver fall back to PIO. See docs.aerium.co.il fixing-uart-dma-jetpack.
+        for uart in 3100000 3110000; do
+            sed -i "/serial@$uart {/,/\};/ { /dmas = /d; /dma-names = /d; }" "$dts"
+        done
 
         # C — CSI: port-index=0, serial_a
         sed -i 's/port-index = <0x01>;/port-index = <0x00>;/g' "$dts"

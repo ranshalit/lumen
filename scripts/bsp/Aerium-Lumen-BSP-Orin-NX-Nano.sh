@@ -145,6 +145,13 @@ patch_dtb_files() {
         sed -i 's/port-index = <0x01>;/port-index = <0x00>;/g' "$dts_file"
         sed -i 's/tegra_sinterface = "serial_b";/tegra_sinterface = "serial_a";/g' "$dts_file"
 
+	# UART DMA fix — force PIO mode on serial@3100000 (ttyTHS1) and serial@3110000 (ttyTHS2).
+	# JetPack 6.2.2 / L4T R36.5 serial-tegra DMA corrupts RX/TX data; removing dmas/dma-names
+	# makes the driver fall back to PIO. See docs.aerium.co.il fixing-uart-dma-jetpack.
+	for uart in 3100000 3110000; do
+	    sed -i "/serial@$uart {/,/};/ { /dmas = /d; /dma-names = /d; }" "$dts_file"
+	done
+
 	ERR_LOG="$LOG_DIR/$base_name.dtc.err"
 	if dtc -I dts -O dtb -o "$dtb_file" "$dts_file" 2> "$ERR_LOG"; then
 		echo "   [OK] Patched: $base_name.dtb"
