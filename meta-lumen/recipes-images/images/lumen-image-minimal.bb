@@ -40,6 +40,7 @@ IMAGE_INSTALL += " \
     lumen-udev-rules \
     dragonfly \
     lumen-rootfs-resize \
+    tegra-flash-reboot \
     kernel-module-usbserial \
     kernel-module-ftdi-sio \
     kernel-module-lan743x \
