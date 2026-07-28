@@ -33,8 +33,8 @@ add to validation; docker, runtime nvidia, ntp
    - placeholders (XXXX) in meta-lumen/recipes-core/udev/lumen-udev-rules/99-lumen-devices.rules
    - plug in hardware and run: udevadm info -a -n /dev/ttyUSB<N> to get real vendor/product IDs
 
-4. lumen-app auto-start at boot (app_req branch):
-   - BSP owns: S60lumen-app init script starts docker compose at boot
+4. dragonfly auto-start at boot (app_req branch):
+   - BSP owns: S60dragonfly init script starts docker compose at boot
    - App team owns: /opt/dragonfly/docker-compose.yaml + images
    - No BSP rebuild needed when app team updates their docker app
 

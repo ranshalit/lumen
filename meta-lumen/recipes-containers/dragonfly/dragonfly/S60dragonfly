@@ -1,6 +1,6 @@
 #!/bin/sh
 ### BEGIN INIT INFO
-# Provides:          lumen-app
+# Provides:          dragonfly
 # Required-Start:    docker
 # Required-Stop:     docker
 # Default-Start:     5
@@ -29,14 +29,14 @@ case "$1" in
         # now returns before dockerd is fully up), then starts the compose stack.
         (
             if [ ! -f "$COMPOSE_FILE" ]; then
-                echo "lumen-app: no compose file at $COMPOSE_FILE, skipping"
+                echo "dragonfly: no compose file at $COMPOSE_FILE, skipping"
                 exit 0
             fi
             if ! wait_for_docker; then
-                echo "lumen-app: dockerd not ready after 10s, skipping"
+                echo "dragonfly: dockerd not ready after 10s, skipping"
                 exit 0
             fi
-            echo "lumen-app: starting application stack"
+            echo "dragonfly: starting application stack"
             $DOCKER compose -f "$COMPOSE_FILE" up -d
         ) &
         ;;
@@ -44,7 +44,7 @@ case "$1" in
         if [ ! -f "$COMPOSE_FILE" ]; then
             exit 0
         fi
-        echo "lumen-app: stopping application stack"
+        echo "dragonfly: stopping application stack"
         $DOCKER compose -f "$COMPOSE_FILE" down
         ;;
     restart|force-reload)

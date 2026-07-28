@@ -43,7 +43,7 @@ start() {
         # Launch dockerd in the background and return immediately.
         # The pidfile poll that was here (up to 10 x 1s sleeps) is intentionally
         # removed — it blocked the login prompt for up to 10 seconds.
-        # lumen-app (S60) handles its own docker-readiness check independently.
+        # dragonfly (S60) handles its own docker-readiness check independently.
         "$unshare" -m -- $exec $other_args >> $logfile 2>&1 &
         touch $lockfile
         success

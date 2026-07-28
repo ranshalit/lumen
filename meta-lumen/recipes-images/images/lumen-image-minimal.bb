@@ -38,7 +38,7 @@ IMAGE_INSTALL += " \
     nvidia-docker \
     docker-compose \
     lumen-udev-rules \
-    lumen-app \
+    dragonfly \
     lumen-rootfs-resize \
     kernel-module-usbserial \
     kernel-module-ftdi-sio \

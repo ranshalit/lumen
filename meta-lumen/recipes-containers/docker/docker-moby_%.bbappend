@@ -5,7 +5,7 @@
 # the sysvinit rc5 sequence — and therefore the login prompt — for up to 10s.
 #
 # This bbappend replaces docker.init with a fire-and-forget version: dockerd is
-# launched in the background and start() returns immediately.  lumen-app (S60)
+# launched in the background and start() returns immediately.  dragonfly (S60)
 # has its own bounded docker-readiness poll and is itself non-blocking.
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"

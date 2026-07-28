@@ -16,9 +16,9 @@ The BSP provides the boot infrastructure. The application team provides the app.
 | `docker-compose.yaml` | App team |
 | Config files, mission data | App team |
 
-The BSP init script (`S60lumen-app`) runs at every boot and executes:
+The BSP init script (`S60dragonfly`) runs at every boot and executes:
 ```
-docker compose -f /opt/dragonfly/docker-compose.yaml --project-name lumen up -d
+docker compose -f /opt/dragonfly/docker-compose.yaml up -d
 ```
 
 Everything under `/opt/dragonfly/` is owned by the app team. **No BSP rebuild or
@@ -161,7 +161,7 @@ Same steps as first-time deployment — `install.sh` handles cleanup of old imag
 and replaces the compose file. Then reboot (or restart without reboot):
 
 ```bash
-sudo /etc/init.d/lumen-app restart
+sudo /etc/init.d/dragonfly restart
 ```
 
 ---
@@ -264,10 +264,10 @@ docker ps
 docker logs <container-name>
 
 # Start / stop app manually
-sudo /etc/init.d/lumen-app start
-sudo /etc/init.d/lumen-app stop
-sudo /etc/init.d/lumen-app restart
-sudo /etc/init.d/lumen-app status
+sudo /etc/init.d/dragonfly start
+sudo /etc/init.d/dragonfly stop
+sudo /etc/init.d/dragonfly restart
+sudo /etc/init.d/dragonfly status
 
 # Check available disk space
 df -h /
