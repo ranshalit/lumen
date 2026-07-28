@@ -42,6 +42,7 @@ IMAGE_INSTALL += " \
     lumen-rootfs-resize \
     kernel-module-usbserial \
     kernel-module-ftdi-sio \
+    kernel-module-lan743x \
     kernel-module-cdc-acm \
     kernel-module-uvcvideo \
     kernel-module-fat \

@@ -23,4 +23,5 @@ SRC_URI:append:lumen = " \
     file://strip-phase4-debug.cfg \
     file://strip-phase5-fs-modules.cfg \
     file://docker-support.cfg \
+    file://portus-net.cfg \
     "

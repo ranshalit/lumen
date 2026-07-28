@@ -16,6 +16,13 @@ SUBSYSTEM=="tty", KERNELS=="3110000.serial", SYMLINK+="ttyHodakev", MODE="0666"
 # Camera serial interface — USB serial (Cypress VID:PID 04b4:7510)
 SUBSYSTEM=="tty", ATTRS{idVendor}=="04b4", ATTRS{idProduct}=="7510", SYMLINK+="ttyCameraSerial", MODE="0666"
 
+# Portus expansion card — Microchip LAN7430 Gigabit Ethernet (PCIe, lan743x).
+# Two NICs now exist (onboard r8168 + Portus lan743x); the kernel assigns
+# eth0/eth1 by probe order, which races. Pin stable names so the onboard NIC
+# always keeps eth0 (lumen-eth-static hardcodes eth0) and Portus gets its own.
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="r8168", NAME="eth0"
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="lan743x", NAME="portus0"
+
 # usb2-0 dual-role port — force host mode when the role switch appears.
 # The port defaults to device/none at boot; the application needs it as a host.
 # Event-driven (fires when /sys/class/usb_role/usb2-0-role-switch is created),
