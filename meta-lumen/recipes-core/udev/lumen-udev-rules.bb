@@ -11,6 +11,7 @@
 #   /dev/ttyTeensy      — Teensy microcontroller (USB serial)
 #   /dev/ttyHodakev     — Hodakev device (USB serial, VID:PID TBD)
 #   /dev/ttyCameraSerial — Camera serial interface (USB serial, VID:PID TBD)
+#   usb2-0-role-switch   — dual-role USB port forced to host mode at boot
 #
 # To find real VID:PID: udevadm info -a -n /dev/ttyUSB<N> on target hardware.
 

@@ -15,3 +15,9 @@ SUBSYSTEM=="tty", KERNELS=="3110000.serial", SYMLINK+="ttyHodakev", MODE="0666"
 
 # Camera serial interface — USB serial (Cypress VID:PID 04b4:7510)
 SUBSYSTEM=="tty", ATTRS{idVendor}=="04b4", ATTRS{idProduct}=="7510", SYMLINK+="ttyCameraSerial", MODE="0666"
+
+# usb2-0 dual-role port — force host mode when the role switch appears.
+# The port defaults to device/none at boot; the application needs it as a host.
+# Event-driven (fires when /sys/class/usb_role/usb2-0-role-switch is created),
+# so there is no boot-time cost and no init-script ordering to manage.
+SUBSYSTEM=="usb_role", KERNEL=="usb2-0-role-switch", ATTR{role}="host"

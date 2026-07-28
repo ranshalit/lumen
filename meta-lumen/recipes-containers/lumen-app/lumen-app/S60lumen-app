@@ -37,7 +37,7 @@ case "$1" in
                 exit 0
             fi
             echo "lumen-app: starting application stack"
-            $DOCKER compose -f "$COMPOSE_FILE" --project-name "$PROJECT" up -d
+            $DOCKER compose -f "$COMPOSE_FILE" up -d
         ) &
         ;;
     stop)
@@ -45,14 +45,14 @@ case "$1" in
             exit 0
         fi
         echo "lumen-app: stopping application stack"
-        $DOCKER compose -f "$COMPOSE_FILE" --project-name "$PROJECT" down
+        $DOCKER compose -f "$COMPOSE_FILE" down
         ;;
     restart|force-reload)
         $0 stop
         $0 start
         ;;
     status)
-        $DOCKER compose -f "$COMPOSE_FILE" --project-name "$PROJECT" ps
+        $DOCKER compose -f "$COMPOSE_FILE" ps
         ;;
     *)
         echo "Usage: $0 {start|stop|restart|status}"
