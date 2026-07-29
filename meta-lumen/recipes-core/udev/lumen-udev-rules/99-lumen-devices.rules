@@ -17,10 +17,11 @@ SUBSYSTEM=="tty", KERNELS=="3110000.serial", SYMLINK+="ttyHodakev", MODE="0666"
 SUBSYSTEM=="tty", ATTRS{idVendor}=="04b4", ATTRS{idProduct}=="7510", SYMLINK+="ttyCameraSerial", MODE="0666"
 
 # Portus expansion card — Microchip LAN7430 Gigabit Ethernet (PCIe, lan743x).
-# Two NICs now exist (onboard r8168 + Portus lan743x); the kernel assigns
-# eth0/eth1 by probe order, which races. Pin stable names so the onboard NIC
-# always keeps eth0 (lumen-eth-static hardcodes eth0) and Portus gets its own.
-SUBSYSTEM=="net", ACTION=="add", DRIVERS=="r8168", NAME="eth0"
+# Give only the Portus NIC an explicit name; the onboard r8168 keeps eth0 by
+# the kernel default. Do NOT add a NAME= rule for the onboard NIC: renaming an
+# interface the r8168 driver is already bringing up forces udev to re-do the
+# link bring-up on the add event, racing PHY autonegotiation and delaying
+# "eth0: link up" from ~8s to ~150s (boot-to-ping regression).
 SUBSYSTEM=="net", ACTION=="add", DRIVERS=="lan743x", NAME="portus0"
 
 # usb2-0 dual-role port — force host mode when the role switch appears.
