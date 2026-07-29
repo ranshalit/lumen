@@ -11,7 +11,12 @@
 #   /dev/ttyTeensy      — Teensy microcontroller (USB serial)
 #   /dev/ttyHodakev     — Hodakev device (USB serial, VID:PID TBD)
 #   /dev/ttyCameraSerial — Camera serial interface (USB serial, VID:PID TBD)
-#   usb2-0-role-switch   — dual-role USB port forced to host mode at boot
+#
+# The usb2-0 dual-role port host-mode switch used to live here as an
+# `ATTR{role}="host"` rule but was moved to the lumen-usb2-host init script:
+# writing the role attribute from a coldplug udev worker blocks `udevadm
+# settle` for its full 120s default and freezes boot. See the note in
+# 99-lumen-devices.rules and recipe lumen-usb2-host.bb.
 #
 # To find real VID:PID: udevadm info -a -n /dev/ttyUSB<N> on target hardware.
 

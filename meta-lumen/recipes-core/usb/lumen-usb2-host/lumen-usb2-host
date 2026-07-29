@@ -1,0 +1,48 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          lumen-usb2-host
+# Required-Start:
+# Required-Stop:
+# Default-Start:
+# Default-Stop:
+# Short-Description: Force usb2-0 dual-role port to host mode (non-blocking)
+### END INIT INFO
+#
+# The usb2-0 dual-role port defaults to device/none at boot; the application
+# needs it in host mode. This MUST NOT be done via a udev `ATTR{role}="host"`
+# rule: on tegra the role sysfs write blocks in the padctl role-switch driver
+# until the controller/PHY is ready, and when performed by a coldplug udev
+# worker it stalls `udevadm settle` for its full 120s default, freezing the
+# entire boot (boot-to-ping regressed from ~8s to ~130s).
+#
+# Instead we set the role from a detached background subshell so the write can
+# never block the boot path, no matter how long the controller takes to come
+# up. Everything runs in `( ... ) &` — rcS returns immediately.
+
+ROLE_SWITCH=/sys/class/usb_role/usb2-0-role-switch/role
+
+case "$1" in
+    start)
+        (
+            # Wait for the role-switch sysfs node to appear (padctl probe).
+            i=0
+            while [ $i -lt 200 ] && [ ! -e "$ROLE_SWITCH" ]; do
+                sleep 0.05
+                i=$((i+1))
+            done
+
+            # Skip the write if already host (idempotent, avoids poking the
+            # role-switch state machine unnecessarily).
+            if [ "$(cat "$ROLE_SWITCH" 2>/dev/null)" != "host" ]; then
+                echo host > "$ROLE_SWITCH" 2>/dev/null || true
+            fi
+        ) &
+        ;;
+    stop)
+        echo device > "$ROLE_SWITCH" 2>/dev/null || true
+        ;;
+    *)
+        echo "Usage: $0 {start|stop}"
+        exit 1
+        ;;
+esac

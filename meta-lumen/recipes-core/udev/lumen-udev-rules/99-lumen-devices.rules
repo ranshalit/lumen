@@ -24,8 +24,17 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="04b4", ATTRS{idProduct}=="7510", SYMLINK+="t
 # "eth0: link up" from ~8s to ~150s (boot-to-ping regression).
 SUBSYSTEM=="net", ACTION=="add", DRIVERS=="lan743x", NAME="portus0"
 
-# usb2-0 dual-role port — force host mode when the role switch appears.
-# The port defaults to device/none at boot; the application needs it as a host.
-# Event-driven (fires when /sys/class/usb_role/usb2-0-role-switch is created),
-# so there is no boot-time cost and no init-script ordering to manage.
-SUBSYSTEM=="usb_role", KERNEL=="usb2-0-role-switch", ATTR{role}="host"
+# usb2-0 dual-role port host-mode switch is NOT done here.
+#
+# A `SUBSYSTEM=="usb_role", ATTR{role}="host"` rule looks harmless but is a
+# boot-killer: during coldplug (`udevadm trigger --action=add` in the S04udev
+# init script) the udev worker performs the `role` attribute write itself, and
+# on tegra that sysfs write blocks in the padctl role-switch driver until the
+# controller/PHY is ready. The worker never finishes, so the following
+# `udevadm settle` (no timeout, S04udev line 106) waits its full 120s default
+# before rcS continues — freezing the ENTIRE boot for ~120s with zero kernel
+# log output (boot-to-ping regressed from ~8s to ~130s).
+#
+# The role switch is now handled by the backgrounded rcS init script
+# lumen-usb2-host (recipe lumen-usb2-host.bb), which writes "host" from a
+# detached subshell so it can never block boot regardless of controller state.

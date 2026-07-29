@@ -19,6 +19,7 @@ IMAGE_INSTALL += " \
     tegra-libraries-core \
     tegra-nvsciipc \
     lumen-eth-static \
+    lumen-usb2-host \
     ifupdown \
     ethtool \
     sudo \

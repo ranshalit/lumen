@@ -2,7 +2,7 @@
 
 Aerium Lumen board — Yocto-based Linux build for the NVIDIA Jetson Orin NX / Orin Nano (p3767 SOM).
 
-Product docs: https://docs.aerium.co.il/Product%20Manuals/Lumen
+Product docs: https://docs.aerium.co.il/Product%20Manuals/Lumen 
 
 ---
 
@@ -20,7 +20,7 @@ Product docs: https://docs.aerium.co.il/Product%20Manuals/Lumen
 ## Build from Git (Reproducible)
 
 This repo contains everything needed to produce the exact same image on any Ubuntu 22.04 machine.
-All external layer versions are pinned by commit SHA in `kas/lumen-common.yml`.
+All external layer versions are pinned by commit SHA in `kas/lumen-common.yml`. 
 
 ### 1. Prerequisites (one-time)
 
