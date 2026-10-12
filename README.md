@@ -225,6 +225,23 @@ sudo ./initrd-flash  # or: sudo ./flash.sh <board-config> mmcblk0p1
 
 ---
 
+## Static Ethernet IP
+
+The default `eth0` address is `192.0.5.10/24`. For a new image, change
+`ETH_STATIC_IP` in `meta-lumen/recipes-core/network/lumen-eth-static.bb`;
+the build inserts that address into both the boot script and the ifupdown
+configuration.
+
+On a **running device**, the address is present in two separate files:
+`/etc/init.d/lumen-eth-static` (`IP=...`) sets it during boot, while
+`/etc/network/interfaces` (`address ...`) is used by manual `ifup eth0`.
+If changing the address directly on the device, update **both** files to
+the same value. Otherwise boot and manual interface setup can use different
+addresses. On the device these files are independent; changing the Yocto
+recipe only affects a rebuilt image, not an already running device.
+
+---
+
 ## BSP Patches Applied
 
 | Patch | File | Recipe |
@@ -397,4 +414,3 @@ Uses `COMPATIBLE_MACHINE = "(lumen)"` so it only builds for Lumen targets.
 ### 11. Update .gitignore
 
 Added entries for `build/`, `downloads/`, `sstate-cache/`, `.kas-*`.
-

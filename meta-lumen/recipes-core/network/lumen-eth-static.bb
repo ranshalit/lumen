@@ -10,6 +10,9 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda
 PACKAGE_ARCH = "${MACHINE_ARCH}"
 COMPATIBLE_MACHINE = "(lumen)"
 
+# Single source of truth for the address used by both configuration paths.
+ETH_STATIC_IP = "192.0.5.10"
+
 # lumen-eth-static owns /etc/network/interfaces, replacing the default init-ifupdown file
 RCONFLICTS:${PN} += "init-ifupdown"
 RREPLACES:${PN} += "init-ifupdown"
@@ -28,12 +31,14 @@ do_compile[noexec] = "1"
 
 do_install() {
     install -d ${D}${sysconfdir}/network
-    install -m 0644 ${WORKDIR}/interfaces \
-        ${D}${sysconfdir}/network/interfaces
+    sed "s/@ETH_STATIC_IP@/${ETH_STATIC_IP}/g" ${WORKDIR}/interfaces \
+        > ${D}${sysconfdir}/network/interfaces
+    chmod 0644 ${D}${sysconfdir}/network/interfaces
 
     install -d ${D}${sysconfdir}/init.d
-    install -m 0755 ${WORKDIR}/lumen-eth-static \
-        ${D}${sysconfdir}/init.d/lumen-eth-static
+    sed "s/@ETH_STATIC_IP@/${ETH_STATIC_IP}/g" ${WORKDIR}/lumen-eth-static \
+        > ${D}${sysconfdir}/init.d/lumen-eth-static
+    chmod 0755 ${D}${sysconfdir}/init.d/lumen-eth-static
 
     # Run early in rcS.d (S07, just after S06modutils loads r8168) so the
     # script's background subshell can wait for /sys/class/net/eth0 and

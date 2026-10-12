@@ -12,10 +12,10 @@
 # with the login prompt so it never delays the boot path.
 # lo (loopback) is handled automatically by the kernel; no ifup lo needed.
 #
-# IP address MUST match /etc/network/interfaces (kept for manual `ifup` use).
+# IP and /etc/network/interfaces address are rendered from ETH_STATIC_IP in the recipe.
 
 IFACE=eth0
-IP=192.0.5.10
+IP=@ETH_STATIC_IP@
 CIDR=24
 
 case "$1" in
@@ -77,4 +77,3 @@ case "$1" in
         exit 1
         ;;
 esac
-
