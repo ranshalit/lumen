@@ -129,8 +129,13 @@ push_boot(){
   dscp "$src" "$SSH_USER@$DEVICE_IP:$tmp"
   dssh "${SUDO}mv $tmp $dst && ${SUDO}chown root:root $dst"
 }
-ssh_ready(){ SSHPASS="$SSH_PASS" sshpass -e ssh "${SSH_OPTS[@]}" -o ConnectTimeout=8 "$SSH_USER@$DEVICE_IP" "echo __UP__" 2>/dev/null | grep -q __UP__; }
-wait_ssh(){ local n="${1:-40}"; for _ in $(seq 1 "$n"); do ssh_ready && return 0; sleep 5; done; return 1; }
+ssh_ready(){ SSHPASS="$SSH_PASS" sshpass -e ssh -o ConnectTimeout=5 "${SSH_OPTS[@]}" "$SSH_USER@$DEVICE_IP" "echo __UP__" 2>/dev/null | grep -q __UP__; }
+# Poll SSH, returning the instant the board answers. $1 = max attempts. Each
+# attempt costs up to ~5s connect-timeout (only when the host is reachable-but-
+# silent; a downed link fails fast) + 5s sleep, so the wall-clock cap is roughly
+# n*10s worst case, but a board that comes back early returns early. Prints a
+# heartbeat (elapsed sleep seconds) every ~30s so a long wait isn't silent.
+wait_ssh(){ local n="${1:-40}" k=0; for _ in $(seq 1 "$n"); do ssh_ready && { [ "$k" -gt 0 ] && echo; return 0; }; k=$((k+1)); [ $((k % 6)) -eq 0 ] && printf ' [%ds]' "$((k*5))"; sleep 5; done; echo; return 1; }
 export DEVICE_IP DEVICE_SSH_USER="$SSH_USER" DEVICE_SSH_PASS="$SSH_PASS"
 
 serial_up=0
@@ -367,13 +372,23 @@ bash "$ETH_SKILL/set_extlinux_initrd.sh" set /boot/initrd-flasher --user "$SSH_U
 echo "rebooting into flasher — DO NOT cut power..."
 dssh "${SUDO}sync; ${SUDO}reboot" || true
 sleep 10
+rm -f /tmp/serial.log   # drop any stale log so a missing capture isn't mistaken for this flash
 serial capture --port linux --timeout 300 >/dev/null 2>&1 || true
-grep -aiE "flash\]|POINT OF NO RETURN|SELF-HEAL|flashed\.|Rebooting into|writing .* ->" /tmp/serial.log | tail -25
-grep -aiq "partition(s) flashed" /tmp/serial.log || echo "WARNING: did not see completion line in serial log — check /tmp/serial.log"
+# Serial is best-effort observation only. If no serial is attached there is no
+# /tmp/serial.log — that must NOT abort the run (pipefail would kill a bare
+# `grep missing | tail`). The board flashes and self-reboots regardless; Step 8
+# confirms success authoritatively by waiting for SSH + inspecting the booted OS.
+if [ -f /tmp/serial.log ]; then
+  grep -aiE "flash\]|POINT OF NO RETURN|SELF-HEAL|flashed\.|Rebooting into|writing .* ->" /tmp/serial.log | tail -25 || true
+  grep -aiq "partition(s) flashed" /tmp/serial.log || echo "WARNING: did not see completion line in serial log — check /tmp/serial.log"
+else
+  echo "NOTE: no serial log (no serial attached) — confirming the flash by waiting for SSH to return below."
+fi
 
 # ───────────────────────── Step 8: verify result ─────────────────────────
 log "Step 8: verify"
-wait_ssh 96 || die "device did not come back on SSH after flash — check /tmp/serial.log"
+echo "waiting for the board to finish flashing and reboot (polls SSH, returns as soon as it answers)..."
+wait_ssh 120 || die "device did not come back on SSH after flash (~10–15min budget exhausted) — check serial (/dev/ttyUSB*) to see if it is mid-dd or self-healed"
 dssh "echo '== os =='; grep PRETTY /etc/os-release; echo '== root =='; findmnt -no SOURCE,FSTYPE /; echo '== init =='; cat /proc/1/comm; echo '== extlinux initrd =='; grep -i initrd $EXTLINUX || echo '(none — clean)'"
 
 [ "$serial_up" = 1 ] && serial daemon stop >/dev/null 2>&1 || true
