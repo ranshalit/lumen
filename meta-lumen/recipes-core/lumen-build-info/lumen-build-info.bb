@@ -23,6 +23,7 @@ do_configure[noexec] = "1"
 do_compile[noexec] = "1"
 
 # Refresh the embedded timestamp and all dependent package/image tasks every build.
+do_install[vardepsexclude] += "DATETIME DATE TIME"
 do_install[nostamp] = "1"
 
 do_install() {
