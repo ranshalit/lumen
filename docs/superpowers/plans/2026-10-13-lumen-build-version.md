@@ -38,6 +38,8 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
 LUMEN_BUILD_VERSION = "1.0.0"
+LUMEN_BUILD_TIMESTAMP = "${DATETIME}"
+LUMEN_BUILD_TIMESTAMP[vardepsexclude] = "DATETIME"
 LUMEN_BUILD_GIT_SHA = ""
 
 python __anonymous() {
@@ -52,11 +54,17 @@ python __anonymous() {
     d.setVar("LUMEN_BUILD_GIT_SHA", git_sha)
 }
 
+do_configure[noexec] = "1"
+do_compile[noexec] = "1"
+
+# Refresh the embedded timestamp and all dependent package/image tasks every build.
+do_install[nostamp] = "1"
+
 do_install() {
     install -d ${D}${sysconfdir}
     cat > ${D}${sysconfdir}/lumen-build-info <<EOF
 VERSION=${LUMEN_BUILD_VERSION}
-BUILD_TIMESTAMP_UTC=${DATETIME}
+BUILD_TIMESTAMP_UTC=${LUMEN_BUILD_TIMESTAMP}
 GIT_COMMIT=${LUMEN_BUILD_GIT_SHA}
 MACHINE=${MACHINE}
 YOCTO_RELEASE=${DISTRO_VERSION}
@@ -66,7 +74,7 @@ EOF
 FILES:${PN} = "${sysconfdir}/lumen-build-info"
 ```
 
-The Python function must fail the parse/build if Git SHA lookup fails; do not emit a blank or fallback value. The shell task references `LUMEN_BUILD_GIT_SHA`, so the commit affects the task signature.
+The Python function must fail the parse/build if Git SHA lookup fails; do not emit a blank or fallback value. The shell task references `LUMEN_BUILD_GIT_SHA`, so the commit affects the task signature. `DATETIME` is excluded from signature hashing to prevent nondeterministic base hashes, and `do_install[nostamp]` ensures the timestamp and dependent outputs refresh on each build.
 
 - [ ] **Step 2: Install the package in the image**
 
