@@ -93,6 +93,23 @@ sudo ./initrd-flash
 > The Aerium BSP patches (UART, CSI, BCT, USB OTG) are applied automatically
 > at build time. Do **not** run `scripts/bsp/Aerium-Lumen-BSP-Orin-NX-Nano.sh` manually.
 
+For an Ethernet-only rootfs update without a serial connection, configure the
+target's `DEVICE_IP`, `DEVICE_SSH_USER`, and `DEVICE_SSH_PASS` in `.env`, then run
+from the repository root:
+
+```bash
+./flash_eth_initrd.sh --rootfs-only --no-serial \
+    --image build/tmp/deploy/images/lumen-orin-nx-16gb/lumen-image-minimal-lumen-orin-nx-16gb.rootfs.ext4
+```
+
+Use the image path for the actual module variant. `SERIAL_PORT=""` also disables
+serial. This mode requires host `debugfs` and `/etc/lumen-build-info` in the image:
+success requires SSH to return and the device's build metadata to match the
+selected image. The new image must provide SSH and reachable network settings.
+There is no console supervision or recovery if boot fails. Keep power stable
+throughout flashing; an SSH timeout is an unknown result, not permission to
+power-cycle.
+
 ### Pinned layer versions
 
 | Layer | Commit | Branch |

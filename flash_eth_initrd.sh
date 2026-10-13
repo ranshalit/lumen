@@ -53,6 +53,7 @@
 #   ./flash_eth_initrd.sh --rootfs-only   # only APP/rootfs (old behavior)
 #   ./flash_eth_initrd.sh --yes           # skip the pre-write confirmation prompt
 #   ./flash_eth_initrd.sh --image PATH    # override the rootfs image to flash
+#   ./flash_eth_initrd.sh --no-serial     # verify via SSH + build metadata only
 #   ./flash_eth_initrd.sh --with-phase1   # also run the Phase 1 boot-path validator
 #   ./flash_eth_initrd.sh --phase1-only   # build+validate boot path, then stop
 #
@@ -90,7 +91,7 @@ if [ -z "$TEGRAFLASH_TGZ" ]; then
   TEGRAFLASH_TGZ="$(find "$IMAGES_BASE" -name "*.tegraflash.tar.gz" 2>/dev/null | xargs -r ls -t 2>/dev/null | head -1)"
 fi
 
-SERIAL_PORT="${SERIAL_PORT:-/dev/ttyUSB1}"       # serial observation/recovery channel ("" to skip)
+SERIAL_PORT="${SERIAL_PORT-/dev/ttyUSB1}"        # serial observation/recovery channel ("" to skip)
 
 SKILLS_DIR="${SKILLS_DIR:-$HOME/.copilot/skills}"
 ETH_SKILL="$SKILLS_DIR/eth-initrd-flash/scripts"
@@ -108,6 +109,7 @@ while [ $# -gt 0 ]; do
     --image) IMAGE="$2"; shift 2 ;;
     --full-nvme) SCOPE="full-nvme"; shift ;;
     --rootfs-only) SCOPE="rootfs-only"; shift ;;
+    --no-serial) SERIAL_PORT=""; shift ;;
     --stage-only) STAGE_ONLY=1; shift ;;   # non-destructive: stage+verify+build initrd, then STOP (no writes)
     --phase1-only) PHASE1_ONLY=1; SKIP_PHASE1=0; shift ;;
     --with-phase1) SKIP_PHASE1=0; shift ;;
@@ -146,6 +148,14 @@ log "Step 0: preflight  (scope: $SCOPE)"
 for t in sshpass scp ssh gzip sha256sum cpio readelf python3 tar; do command -v "$t" >/dev/null || die "missing host tool: $t"; done
 [ -f "$IMAGE" ] || die "rootfs image not found: $IMAGE"
 RAW_IMG="$(readlink -f "$IMAGE")"
+EXPECTED_BUILD_INFO=""
+if [ -z "$SERIAL_PORT" ]; then
+  command -v debugfs >/dev/null || die "debugfs is required to verify the flashed image without serial"
+  EXPECTED_BUILD_INFO="$(debugfs -R 'cat /etc/lumen-build-info' "$RAW_IMG" 2>/dev/null)"
+  [ -n "$EXPECTED_BUILD_INFO" ] || die "image has no /etc/lumen-build-info; cannot verify this flash without serial"
+  echo "Serial disabled: verification will require matching /etc/lumen-build-info over SSH."
+  echo "No console recovery is available if the device fails to boot. Do not cut power during flashing."
+fi
 [ -f "$MULTI_INIT" ] || die "multi-partition init template not found: $MULTI_INIT"
 if [ "$SCOPE" = "full-nvme" ]; then
   [ -n "$TEGRAFLASH_TGZ" ] && [ -f "$TEGRAFLASH_TGZ" ] || die "tegraflash package not found (needed for ESP/kernel/dtb). Set TEGRAFLASH_TGZ=<path> or use --rootfs-only"
@@ -333,7 +343,9 @@ fi
 # bring up serial observation channel
 if [ -n "$SERIAL_PORT" ]; then
   serial daemon status 2>/dev/null | grep -q running || { serial daemon start >/dev/null 2>&1 && serial_up=1; }
-  echo "serial log: tail -f /tmp/serial.log"
+  echo "📋 Serial log viewer (open in a terminal):"
+  echo "  tail -f /tmp/serial.log          ← Combined serial output"
+  echo "  tail -f /tmp/serial_daemon.log ← Daemon internal log"
 fi
 
 reboot_and_wait(){ dssh "${SUDO}sync; ${SUDO}reboot" || true; sleep 10; serial capture --port linux --timeout 120 >/dev/null 2>&1 || true; wait_ssh 48 || echo "WARNING: SSH not back yet — check /tmp/serial.log"; grep -aiE "$1" /tmp/serial.log | tail -5 || true; }
@@ -372,13 +384,15 @@ bash "$ETH_SKILL/set_extlinux_initrd.sh" set /boot/initrd-flasher --user "$SSH_U
 echo "rebooting into flasher — DO NOT cut power..."
 dssh "${SUDO}sync; ${SUDO}reboot" || true
 sleep 10
-rm -f /tmp/serial.log   # drop any stale log so a missing capture isn't mistaken for this flash
-serial capture --port linux --timeout 300 >/dev/null 2>&1 || true
+if [ -n "$SERIAL_PORT" ]; then
+  rm -f /tmp/serial.log   # drop any stale log so a missing capture isn't mistaken for this flash
+  serial capture --port linux --timeout 300 >/dev/null 2>&1 || true
+fi
 # Serial is best-effort observation only. If no serial is attached there is no
 # /tmp/serial.log — that must NOT abort the run (pipefail would kill a bare
 # `grep missing | tail`). The board flashes and self-reboots regardless; Step 8
 # confirms success authoritatively by waiting for SSH + inspecting the booted OS.
-if [ -f /tmp/serial.log ]; then
+if [ -n "$SERIAL_PORT" ] && [ -f /tmp/serial.log ]; then
   grep -aiE "flash\]|POINT OF NO RETURN|SELF-HEAL|flashed\.|Rebooting into|writing .* ->" /tmp/serial.log | tail -25 || true
   grep -aiq "partition(s) flashed" /tmp/serial.log || echo "WARNING: did not see completion line in serial log — check /tmp/serial.log"
 else
@@ -388,7 +402,15 @@ fi
 # ───────────────────────── Step 8: verify result ─────────────────────────
 log "Step 8: verify"
 echo "waiting for the board to finish flashing and reboot (polls SSH, returns as soon as it answers)..."
-wait_ssh 120 || die "device did not come back on SSH after flash (~10–15min budget exhausted) — check serial (/dev/ttyUSB*) to see if it is mid-dd or self-healed"
+wait_ssh 120 || die "device did not come back on SSH after flash (~10–15min budget exhausted). Flash status is UNKNOWN; do not assume it is safe to power-cycle. Console or USB recovery may be needed."
+if [ -n "$EXPECTED_BUILD_INFO" ]; then
+  ACTUAL_BUILD_INFO="$(SSHPASS="$SSH_PASS" sshpass -e ssh "${SSH_OPTS[@]}" "$SSH_USER@$DEVICE_IP" 'cat /etc/lumen-build-info')" \
+    || die "SSH returned, but build metadata could not be read; flash is not verified"
+  [ "$ACTUAL_BUILD_INFO" = "$EXPECTED_BUILD_INFO" ] \
+    || die "SSH returned, but build metadata differs from the selected image; flash is not verified (the flasher may have self-healed)"
+  echo "Build metadata matches the selected image:"
+  printf '%s\n' "$ACTUAL_BUILD_INFO"
+fi
 dssh "echo '== os =='; grep PRETTY /etc/os-release; echo '== root =='; findmnt -no SOURCE,FSTYPE /; echo '== init =='; cat /proc/1/comm; echo '== extlinux initrd =='; grep -i initrd $EXTLINUX || echo '(none — clean)'"
 
 [ "$serial_up" = 1 ] && serial daemon stop >/dev/null 2>&1 || true
