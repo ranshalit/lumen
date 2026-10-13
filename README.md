@@ -68,6 +68,19 @@ build/tmp/deploy/images/<machine>/
 └── lumen-image-minimal-<machine>.tegraflash.tar.gz  # flash package
 ```
 
+### Build version on target
+
+On the device, read the image version and build provenance with:
+
+```sh
+cat /etc/lumen-build-info
+```
+
+The release version starts at `1.0.0` and is manually bumped by changing
+`LUMEN_BUILD_VERSION` in
+`meta-lumen/recipes-core/lumen-build-info/lumen-build-info.bb`. The build
+timestamp and Git commit identify the specific image build and source revision.
+
 ### 4. Flash
 
 ```bash

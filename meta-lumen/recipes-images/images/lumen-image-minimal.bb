@@ -39,6 +39,7 @@ IMAGE_INSTALL += " \
     nvidia-docker \
     docker-compose \
     lumen-udev-rules \
+    lumen-build-info \
     dragonfly \
     lumen-rootfs-resize \
     tegra-flash-reboot \
