@@ -12,6 +12,7 @@ COMPATIBLE_MACHINE = "(lumen)"
 
 # Single source of truth for the address used by both configuration paths.
 ETH_STATIC_IP = "192.0.5.10"
+PORTUS_STATIC_IP = "192.168.1.10"
 
 # lumen-eth-static owns /etc/network/interfaces, replacing the default init-ifupdown file
 RCONFLICTS:${PN} += "init-ifupdown"
@@ -31,12 +32,16 @@ do_compile[noexec] = "1"
 
 do_install() {
     install -d ${D}${sysconfdir}/network
-    sed "s/@ETH_STATIC_IP@/${ETH_STATIC_IP}/g" ${WORKDIR}/interfaces \
+    sed -e "s/@ETH_STATIC_IP@/${ETH_STATIC_IP}/g" \
+        -e "s/@PORTUS_STATIC_IP@/${PORTUS_STATIC_IP}/g" \
+        ${WORKDIR}/interfaces \
         > ${D}${sysconfdir}/network/interfaces
     chmod 0644 ${D}${sysconfdir}/network/interfaces
 
     install -d ${D}${sysconfdir}/init.d
-    sed "s/@ETH_STATIC_IP@/${ETH_STATIC_IP}/g" ${WORKDIR}/lumen-eth-static \
+    sed -e "s/@ETH_STATIC_IP@/${ETH_STATIC_IP}/g" \
+        -e "s/@PORTUS_STATIC_IP@/${PORTUS_STATIC_IP}/g" \
+        ${WORKDIR}/lumen-eth-static \
         > ${D}${sysconfdir}/init.d/lumen-eth-static
     chmod 0755 ${D}${sysconfdir}/init.d/lumen-eth-static
 

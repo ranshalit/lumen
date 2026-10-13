@@ -68,6 +68,29 @@ case "$1" in
 
             ip addr add $IP/$CIDR dev $IFACE 2>/dev/null || true
         ) &
+
+        (
+            i=0
+            while [ "$i" -lt 100 ] && [ ! -e /sys/class/net/portus0 ]; do
+                sleep 0.05
+                i=$((i + 1))
+            done
+
+            if [ ! -e /sys/class/net/portus0 ]; then
+                echo "lumen-eth-static: portus0 did not appear" >&2
+                exit 1
+            fi
+
+            if ! ip link set portus0 up; then
+                echo "lumen-eth-static: failed to bring up portus0" >&2
+                exit 1
+            fi
+
+            if ! ip addr replace @PORTUS_STATIC_IP@/24 dev portus0; then
+                echo "lumen-eth-static: failed to assign address to portus0" >&2
+                exit 1
+            fi
+        ) &
         ;;
     stop)
         ip link set $IFACE down 2>/dev/null || true

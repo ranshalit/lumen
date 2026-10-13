@@ -5,3 +5,8 @@ auto eth0
 iface eth0 inet static
     address @ETH_STATIC_IP@
     netmask 255.255.255.0
+
+auto portus0
+iface portus0 inet static
+    address @PORTUS_STATIC_IP@
+    netmask 255.255.255.0
