@@ -57,9 +57,7 @@ python __anonymous() {
 do_configure[noexec] = "1"
 do_compile[noexec] = "1"
 
-# Refresh the embedded timestamp and all dependent package/image tasks every build.
 do_install[vardepsexclude] += "DATETIME DATE TIME"
-do_install[nostamp] = "1"
 
 do_install() {
     install -d ${D}${sysconfdir}
@@ -75,7 +73,7 @@ EOF
 FILES:${PN} = "${sysconfdir}/lumen-build-info"
 ```
 
-The Python function must fail the parse/build if Git SHA lookup fails; do not emit a blank or fallback value. The shell task references `LUMEN_BUILD_GIT_SHA`, so the commit affects the task signature. Dynamic date variables are excluded from signature hashing to prevent nondeterministic base hashes, and `do_install[nostamp]` ensures the timestamp and dependent outputs refresh on each build.
+The Python function must fail the parse/build if Git SHA lookup fails; do not emit a blank or fallback value. The shell task references `LUMEN_BUILD_GIT_SHA`, so the commit affects the task signature. Dynamic date variables are excluded from task signature hashing to prevent nondeterministic base hashes.
 
 - [ ] **Step 2: Install the package in the image**
 
