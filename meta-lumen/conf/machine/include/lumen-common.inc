@@ -51,6 +51,10 @@ KERNEL_ARGS:append = " root=/dev/nvme0n1p1 rootwait rw"
 TEGRA_MB1_LOG_LEVEL = "0"
 TEGRA_BPMP_SERIAL_LOGGING = "0"
 
+# Keep the Tegra UART and add QEMU virt's PL011 UART. ttyrun starts getty
+# only when the device exists, so the same image supports both environments.
+SERIAL_CONSOLES:append = " 115200;ttyAMA0"
+
 # Suppress kernel log output on serial during boot (saves time at 115200 baud).
 # dmesg is available post-boot for diagnostics.
 KERNEL_ARGS:append = " quiet loglevel=0 audit=0"
