@@ -17,6 +17,9 @@ IMAGE_FEATURES += "ssh-server-openssh"
 IMAGE_INSTALL += " \
     packagegroup-core-boot \
     tegra-libraries-core \
+    tegra-libraries-eglcore \
+    tegra-libraries-glescore \
+    libglvnd \
     tegra-nvsciipc \
     lumen-eth-static \
     lumen-usb2-host \
