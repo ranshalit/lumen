@@ -64,9 +64,45 @@ Expected build time: **2–4 hours** on a 20-core machine.
 
 ```
 build/tmp/deploy/images/<machine>/
-├── lumen-image-minimal-<machine>.ext4          # rootfs
+├── lumen-image-minimal-<machine>.rootfs.ext4    # rootfs
 └── lumen-image-minimal-<machine>.tegraflash.tar.gz  # flash package
 ```
+
+### Run a built image in QEMU
+
+QEMU boots an existing build output; it does not build the image. Install QEMU
+and `socat` on the Ubuntu host:
+
+```bash
+sudo apt-get install -y qemu-system-arm socat
+```
+
+Build the Lumen variant first, then pass its machine name to `run-qemu.sh`:
+
+```bash
+kas build kas/lumen-orin-nano-8gb.yml
+./run-qemu.sh lumen-orin-nano-8gb
+```
+
+The launcher accepts `lumen-orin-nx-16gb`, `lumen-orin-nx-8gb`,
+`lumen-orin-nano-8gb`, or `lumen-orin-nano-4gb`. In another terminal, follow
+the boot log and connect to the serial login:
+
+```bash
+tail -f /tmp/lumen-qemu/lumen-orin-nano-8gb/console.log
+socat - UNIX-CONNECT:/tmp/lumen-qemu/lumen-orin-nano-8gb/console.sock
+```
+
+Set `LUMEN_QEMU_LOGS=/path/to/log-root` to store logs and the serial socket
+elsewhere; the launcher creates a machine-specific directory underneath it.
+The rootfs is attached in snapshot mode, so changes made in the VM are discarded
+when QEMU exits.
+
+This is basic software testing on QEMU's generic ARM `virt` machine, not a
+Jetson hardware emulator. It does not provide the Jetson GPU, camera, or
+carrier-board peripherals, and its user-mode networking is not equivalent to
+the Lumen board's network. Boot also depends on the existing Tegra kernel
+supporting QEMU's virtio devices; a QEMU-specific Yocto target is not built.
 
 ### Build version on target
 
