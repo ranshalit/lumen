@@ -60,6 +60,117 @@ kas will automatically:
 
 Expected build time: **2–4 hours** on a 20-core machine.
 
+### Docker installation and build
+
+Docker is an alternative to installing the Yocto host dependencies above. Run
+the following host commands from the Lumen repository. Allow at least 120 GB
+free disk space and 8 GB RAM for the image build.
+
+#### 1. Install Docker on the Ubuntu host
+
+```bash
+sudo apt-get update
+sudo apt-get install -y docker.io
+sudo systemctl enable --now docker
+sudo docker version
+```
+
+The examples use `sudo` for Docker access; the build helper still passes your
+original user UID/GID into the container so generated files remain user-owned.
+
+#### 2. Download the Scarthgap build environment
+
+Authenticate with your Artifactory credentials when prompted, then pull the
+shared image:
+
+```bash
+sudo docker login artifactory.rafael.co.il
+sudo docker pull artifactory.rafael.co.il/rtsis-docker-local-ww/yocto-scarthgap:v1.4.0
+```
+
+Use this HTTPS registry URL, not the older `:6080` endpoint. Access requires the
+appropriate Rafael network connection and Artifactory permissions.
+
+The shared image is preferred for consistent package versions. If you need to
+build the container image locally instead, use the infrastructure repository:
+
+```bash
+(
+    cd ~/project/embedded_sw/embedded_sw_infrastructures/docker/yocto/docker-yocto-scarthgap
+    sudo ./build.sh
+)
+```
+
+This produces `yocto-scarthgap:v1.4.0`. It still needs access to the Dockerfile's
+Artifactory base image, internal GitLab, and package repositories; it is not an
+offline workaround for registry access.
+
+#### 3. Prepare caches and start the container
+
+The default host cache directories must exist and be writable by your user:
+
+```bash
+mkdir -p /media/ranshal/jetson/shared/downloads /media/ranshal/jetson/shared/sstate
+sudo ./build-in-docker.sh lumen-orin-nx-16gb
+```
+
+The helper mounts this repository at its original absolute host path inside
+the container and uses that path as the working directory. Yocto records the
+absolute `TMPDIR` path, so preserving it lets an existing native build directory
+be reused without a "TMPDIR has changed location" error. The helper also mounts
+the download and sstate-cache directories configured in `kas/lumen-common.yml`.
+Use a matching variant name from the supported-variants table for another module.
+
+For a locally built container image, replace the launch command with:
+
+```bash
+sudo env LUMEN_YOCTO_DOCKER_IMAGE=yocto-scarthgap:v1.4.0 \
+    ./build-in-docker.sh lumen-orin-nx-16gb
+```
+
+To use different existing, writable host cache directories:
+
+```bash
+sudo env LUMEN_DL_CACHE=/path/to/downloads LUMEN_SSTATE_CACHE=/path/to/sstate \
+    ./build-in-docker.sh lumen-orin-nx-16gb
+```
+
+#### 4. Install kas and build Lumen inside the container
+
+The Scarthgap image does not include `kas`. Run these commands inside its shell:
+
+```bash
+python3 -m pip install --user --upgrade pip
+python3 -m pip install --user 'kas==4.8.2'
+export PATH="$HOME/.local/bin:$PATH"
+kas --version
+kas build kas/lumen-orin-nx-16gb.yml
+```
+
+Replace the kas config for another module. Keep the container open until the
+build finishes; the helper starts an interactive shell rather than running
+BitBake as the container's top-level command. This is an incremental build if
+the repository already has build outputs; it also reuses the shared caches.
+Starting a new container does not make the Yocto build clean.
+
+The container is removed when you exit its shell, so install kas again in each
+new container. The repository, caches, and build outputs remain on the host.
+
+#### 5. Access the image outside Docker
+
+The repository is a bind mount, not container-local storage. Its path is the
+same inside and outside Docker. For NX 16GB, the generated files are directly
+accessible from a host terminal:
+
+```bash
+ls -lh build/tmp/deploy/images/lumen-orin-nx-16gb/lumen-image-minimal-*.rootfs.ext4
+ls -lh build/tmp/deploy/images/lumen-orin-nx-16gb/lumen-image-minimal-*.tegraflash.tar.gz
+```
+
+No `docker cp` or Docker image export is needed. The rootfs and tegraflash
+archive are the Lumen deliverables; the Scarthgap Docker image is only the build
+environment.
+
 ### 3. Output
 
 ```
