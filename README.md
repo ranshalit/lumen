@@ -91,6 +91,16 @@ sudo docker pull artifactory.rafael.co.il/rtsis-docker-local-ww/yocto-scarthgap:
 Use this HTTPS registry URL, not the older `:6080` endpoint. Access requires the
 appropriate Rafael network connection and Artifactory permissions.
 
+Build the Lumen CI environment to include `kas` permanently:
+
+```bash
+sudo docker build -f ci/Dockerfile -t lumen-yocto:scarthgap ci
+```
+
+`ci/Dockerfile` extends the shared Scarthgap image, pins its digest, and installs
+`kas 4.8.2` system-wide. It inherits the base image's user setup, so the build
+helper can still run as your host user.
+
 The shared image is preferred for consistent package versions. If you need to
 build the container image locally instead, use the infrastructure repository:
 
@@ -111,7 +121,8 @@ The default host cache directories must exist and be writable by your user:
 
 ```bash
 mkdir -p /media/ranshal/jetson/shared/downloads /media/ranshal/jetson/shared/sstate
-sudo ./build-in-docker.sh lumen-orin-nx-16gb
+sudo env LUMEN_YOCTO_DOCKER_IMAGE=lumen-yocto:scarthgap \
+    ./build-in-docker.sh lumen-orin-nx-16gb
 ```
 
 The helper mounts this repository at its original absolute host path inside
@@ -135,9 +146,16 @@ sudo env LUMEN_DL_CACHE=/path/to/downloads LUMEN_SSTATE_CACHE=/path/to/sstate \
     ./build-in-docker.sh lumen-orin-nx-16gb
 ```
 
-#### 4. Install kas and build Lumen inside the container
+#### 4. Build Lumen inside the container
 
-The Scarthgap image does not include `kas`. Run these commands inside its shell:
+The Lumen CI image already includes `kas`. Inside its shell, run:
+
+```bash
+kas --version
+kas build kas/lumen-orin-nx-16gb.yml
+```
+
+If using the original Scarthgap image instead, install `kas` first:
 
 ```bash
 python3 -m pip install --user --upgrade pip
@@ -153,8 +171,10 @@ BitBake as the container's top-level command. This is an incremental build if
 the repository already has build outputs; it also reuses the shared caches.
 Starting a new container does not make the Yocto build clean.
 
-The container is removed when you exit its shell, so install kas again in each
-new container. The repository, caches, and build outputs remain on the host.
+The container is removed when you exit its shell. With the Lumen CI image,
+`kas` is available in every new container; with the original Scarthgap image,
+repeat the installation above. The repository, caches, and build outputs remain
+on the host.
 
 #### 5. Access the image outside Docker
 
@@ -214,6 +234,83 @@ Jetson hardware emulator. It does not provide the Jetson GPU, camera, or
 carrier-board peripherals, and its user-mode networking is not equivalent to
 the Lumen board's network. Boot also depends on the existing Tegra kernel
 supporting QEMU's virtio devices; a QEMU-specific Yocto target is not built.
+
+### CI workflow: build and QEMU boot validation
+
+The repo provides a CI build environment (`ci/Dockerfile`) and a boot smoke
+test (`ci/test-qemu-boot.sh`). Connect the commands below to your CI service;
+these files alone do not install or enable a pipeline.
+
+Use a runner with Docker access, writable download/sstate caches, at least
+120 GB free disk space, and 8 GB RAM. Registry access requires Rafael network
+connectivity and Artifactory authentication. Run commands from the repo root.
+Do not run concurrent builds against the same `build/` directory.
+
+#### 1. Prepare the CI build environment
+
+```bash
+sudo docker build -f ci/Dockerfile -t lumen-yocto:scarthgap ci
+```
+
+The image includes `kas 4.8.2`; no pip installation or PATH export is needed
+when starting a new container. It does not include QEMU, so install QEMU on the
+host runner for the boot stage:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y qemu-system-arm
+```
+
+#### 2. Build without an interactive terminal
+
+`build-in-docker.sh` is for interactive development, not a CI success check.
+Use a non-interactive container command that returns the build exit status.
+This example lets kas prepare the environment, runs BitBake, and shuts down
+its server before the container exits:
+
+```bash
+sudo docker run --rm \
+    -e UID="$(id -u)" -e GID="$(id -g)" -e USERNAME="$(whoami)" \
+    -w "$PWD" \
+    -v "$PWD:$PWD" \
+    -v /media/ranshal/jetson/shared/downloads:/media/ranshal/jetson/shared/downloads \
+    -v /media/ranshal/jetson/shared/sstate:/media/ranshal/jetson/shared/sstate \
+    lumen-yocto:scarthgap \
+    kas shell kas/lumen-orin-nx-16gb.yml -c \
+    'trap "bitbake -m >/dev/null 2>&1 || true" EXIT; bitbake lumen-image-minimal'
+```
+
+The cache directories must already exist and be writable by the supplied
+UID/GID. Preserve the repo's absolute path when mounting it so Yocto can reuse
+its build state. Change the kas config for another supported module. Configure
+CI to fail on a nonzero container exit code and run the boot stage only after
+a successful build.
+
+#### 3. Check that the generated image reaches a login prompt
+
+```bash
+./ci/test-qemu-boot.sh lumen-orin-nx-16gb
+# Optional timeout in seconds (default: 300, or five minutes):
+./ci/test-qemu-boot.sh lumen-orin-nx-16gb 120
+```
+
+The script returns 0 when the serial console reaches a login prompt and 1 on
+kernel panic, early QEMU exit, or timeout; invalid arguments return 2. It stops
+QEMU on success or failure and preserves logs in a unique directory under
+`build/qemu-ci/`. Set `LUMEN_QEMU_LOGS` to use another log root.
+
+Like `run-qemu.sh`, it reads images from the repository's `build/` directory
+and uses a snapshot to leave the rootfs unchanged. This validates basic boot
+only: it does not log in, check GPU/camera/physical I/O, or emulate Jetson
+hardware. A passing boot test is not a hardware qualification.
+
+#### 4. Collect CI artifacts
+
+Keep the rootfs and `*.tegraflash.tar.gz` files from
+`build/tmp/deploy/images/<machine>/` after a successful build. Save the build
+job output and all of `build/qemu-ci/` as CI artifacts, including on failed
+jobs. Each QEMU run contains `launcher.log` and `<machine>/console.log`, and
+prints its log directory so a failure can be diagnosed.
 
 ### Build version on target
 
