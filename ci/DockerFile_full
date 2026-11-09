@@ -1,0 +1,8 @@
+FROM lumen-yocto:scarthgap
+
+COPY --from=downloads / /media/ranshal/jetson/shared/downloads/
+
+RUN qemu-system-aarch64 --version \
+    && mkdir -p /media/ranshal/jetson/shared/sstate \
+    && chmod -R a+rwX /media/ranshal/jetson/shared/downloads \
+    && chmod a+rwx /media/ranshal/jetson/shared/sstate

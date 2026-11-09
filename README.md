@@ -101,6 +101,48 @@ sudo docker build -f ci/Dockerfile -t lumen-yocto:scarthgap ci
 `kas 4.8.2` system-wide. It inherits the base image's user setup, so the build
 helper can still run as your host user.
 
+#### Optional: include downloads in the Docker image
+
+`ci/DockerFile_full` extends `lumen-yocto:scarthgap` with a snapshot of the
+host downloads cache and an empty, writable sstate directory. Build the base
+CI image above first, then use a named Docker BuildKit context:
+
+```bash
+sudo docker build \
+    -f ci/DockerFile_full \
+    --build-context downloads=/media/ranshal/jetson/shared/downloads \
+    -t lumen-yocto:scarthgap-full ci
+```
+
+This requires BuildKit support for named build contexts. The downloads cache
+is currently about 62 GB; allow substantial additional Docker storage for
+the cache copy, image layers, and build intermediates. The writable-permissions
+layer can add another cache-sized layer. Do not include credentials or private
+configuration files in the cache supplied to this build.
+
+Run the full image without either cache mount, from the repository root:
+
+```bash
+sudo docker run --rm -it \
+    -e UID="$(id -u)" -e GID="$(id -g)" -e USERNAME="$(whoami)" \
+    -w "$PWD" -v "$PWD:$PWD" \
+    lumen-yocto:scarthgap-full bash
+```
+
+Inside, run `kas build kas/lumen-orin-nx-16gb.yml`. The source/output mount
+remains necessary; `build-in-docker.sh` still mounts both host caches, so use
+the command above for this image.
+
+Existing sstate is not embedded: Yocto can rebuild components from sources,
+creating sstate inside the container. Newly downloaded sources and generated
+sstate disappear when the container exits with `--rm`; the embedded download
+snapshot remains available in each new container.
+
+This is not yet a verified offline build bundle. Lumen source and pinned
+layers must also be available, and the download snapshot must contain every
+source needed for the selected target. Validate a fresh build with fetching
+disabled and Docker `--network none` before relying on it offline.
+
 The shared image is preferred for consistent package versions. If you need to
 build the container image locally instead, use the infrastructure repository:
 
@@ -253,13 +295,26 @@ sudo docker build -f ci/Dockerfile -t lumen-yocto:scarthgap ci
 ```
 
 The image includes `kas 4.8.2`; no pip installation or PATH export is needed
-when starting a new container. It does not include QEMU, so install QEMU on the
-host runner for the boot stage:
+when starting a new container. For an interactive local build using this CI
+image, explicitly select it:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y qemu-system-arm
+sudo env LUMEN_YOCTO_DOCKER_IMAGE=lumen-yocto:scarthgap \
+    ./build-in-docker.sh lumen-orin-nx-16gb
+# Inside the container:
+kas build kas/lumen-orin-nx-16gb.yml
 ```
+
+Running the helper without `LUMEN_YOCTO_DOCKER_IMAGE` selects the original
+Artifactory Scarthgap image, not the locally built CI image. The helper does
+not automatically pull missing images. Use `sudo` if your user lacks Docker
+daemon access.
+
+The CI image includes `qemu-system-arm`, providing `qemu-system-aarch64` for
+the boot stage. `ci/DockerFile_full` inherits it from this image; rebuild the
+standard image before rebuilding the full image. No runtime package
+installation is needed. Existing containers must be restarted using the
+rebuilt image to get QEMU.
 
 #### 2. Build without an interactive terminal
 
@@ -286,7 +341,65 @@ its build state. Change the kas config for another supported module. Configure
 CI to fail on a nonzero container exit code and run the boot stage only after
 a successful build.
 
+#### Alternative: build without host downloads/sstate mounts
+
+An online build can use empty, writable caches inside the container instead.
+Run this on the host from the repository root:
+
+```bash
+REPO_PATH="$(pwd -P)"
+sudo docker run --rm -it \
+    -e UID="$(id -u)" -e GID="$(id -g)" -e USERNAME="$(whoami)" \
+    -w "$REPO_PATH" -v "$REPO_PATH:$REPO_PATH" \
+    lumen-yocto:scarthgap bash
+```
+
+If reusing an existing build, the container path must match the path recorded
+in `build/tmp/saved_tmpdir`, without the trailing `/build/tmp`. For example,
+if that file records `/media/ranshal/jetson/lumen/test/lumen/build/tmp`, use:
+
+```bash
+sudo docker run --rm -it \
+    -e UID="$(id -u)" -e GID="$(id -g)" -e USERNAME="$(whoami)" \
+    -w /media/ranshal/jetson/lumen/test/lumen \
+    -v "$PWD:/media/ranshal/jetson/lumen/test/lumen" \
+    lumen-yocto:scarthgap bash
+```
+
+Inside the container, prepare the BitBake environment:
+
+```bash
+kas shell kas/lumen-orin-nx-16gb.yml
+```
+
+Inside the kas shell (which starts in the build directory), run:
+
+```bash
+mkdir -p "$HOME/yocto-cache/downloads" "$HOME/yocto-cache/sstate"
+cat > conf/container-cache.conf <<EOF
+DL_DIR = "$HOME/yocto-cache/downloads"
+SSTATE_DIR = "$HOME/yocto-cache/sstate"
+EOF
+bitbake -R conf/container-cache.conf lumen-image-minimal
+bitbake -m
+```
+
+The closing `EOF` must be alone on its line, with no leading or trailing
+spaces. The `-R` configuration overrides the shared cache paths without
+changing the kas YAML. Use it for each subsequent BitBake build in this shell.
+Stop BitBake with `bitbake -m` before exiting the container.
+
+Internet access is required for missing sources and layers. Container-local
+downloads and sstate disappear when the container exits with `--rm`, so
+subsequent builds may take longer. The rootfs, flash archive, and configuration
+file remain in the mounted repository. These commands are interactive;
+automated CI should use `kas shell ... -c` and return the BitBake exit code,
+with server shutdown in an `EXIT` trap as in the preceding example.
+
 #### 3. Check that the generated image reaches a login prompt
+
+Run inside the CI container with the repository mounted, or on a host with
+QEMU installed:
 
 ```bash
 ./ci/test-qemu-boot.sh lumen-orin-nx-16gb
