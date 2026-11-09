@@ -23,7 +23,7 @@ RPROVIDES:${PN} += "init-ifupdown"
 # training cycle, disable EEE/pause negotiation pages) for faster boot-to-ping.
 RDEPENDS:${PN} += "ethtool"
 
-SRC_URI = "file://interfaces file://lumen-eth-static"
+SRC_URI = "file://interfaces file://lumen-eth-static file://lumen-set-ip"
 
 S = "${WORKDIR}"
 
@@ -45,6 +45,10 @@ do_install() {
         > ${D}${sysconfdir}/init.d/lumen-eth-static
     chmod 0755 ${D}${sysconfdir}/init.d/lumen-eth-static
 
+    install -d ${D}${sbindir}
+    install -m 0755 ${WORKDIR}/lumen-set-ip \
+        ${D}${sbindir}/lumen-set-ip
+
     # Run early in rcS.d (S07, just after S06modutils loads r8168) so the
     # script's background subshell can wait for /sys/class/net/eth0 and
     # start autoneg in parallel with the rest of rcS — this overlaps the
@@ -55,4 +59,4 @@ do_install() {
         ${D}${sysconfdir}/rcS.d/S07lumen-eth-static
 }
 
-FILES:${PN} += "${sysconfdir}/network/interfaces ${sysconfdir}/init.d/lumen-eth-static ${sysconfdir}/rcS.d/S07lumen-eth-static"
+FILES:${PN} += "${sysconfdir}/network/interfaces ${sysconfdir}/init.d/lumen-eth-static ${sysconfdir}/rcS.d/S07lumen-eth-static ${sbindir}/lumen-set-ip"

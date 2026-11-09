@@ -619,13 +619,59 @@ The default `eth0` address is `192.0.5.10/24`. For a new image, change
 the build inserts that address into both the boot script and the ifupdown
 configuration.
 
-On a **running device**, the address is present in two separate files:
-`/etc/init.d/lumen-eth-static` (`IP=...`) sets it during boot, while
-`/etc/network/interfaces` (`address ...`) is used by manual `ifup eth0`.
-If changing the address directly on the device, update **both** files to
-the same value. Otherwise boot and manual interface setup can use different
-addresses. On the device these files are independent; changing the Yocto
-recipe only affects a rebuilt image, not an already running device.
+On a running device, use `/usr/sbin/lumen-set-ip` to stage and persist a
+change. Supply a new, unused IPv4 address with its CIDR prefix; for example:
+
+```sh
+sudo /usr/sbin/lumen-set-ip prepare eth0 192.0.5.20/24
+```
+
+The helper keeps the old address while testing the new one. The 120-second
+window starts when `prepare` stages the address: connect to `192.0.5.20` from
+another host and run `confirm` in that new SSH session before the window expires.
+SSH automatically sets `SSH_CONNECTION`; no manual assignment is needed.
+The `env` wrapper passes its value through `sudo`, which may otherwise discard
+it, so the helper can verify that you connected through the new device IP:
+
+```sh
+sudo env SSH_CONNECTION="$SSH_CONNECTION" /usr/sbin/lumen-set-ip confirm
+```
+
+Confirmation is not just validation: it updates both boot-time and `ifup eth0`
+configuration, cancels rollback, then removes the old live address. If you do not
+confirm within 120 seconds, the timeout removes the staged address and leaves
+the old address and configuration in place. Run `prepare` again to retry.
+To cancel before
+timeout, run this from the old connection or a serial console:
+
+```sh
+sudo /usr/sbin/lumen-set-ip cancel
+```
+
+For the other wired interface, use `portus0` and its desired address/prefix:
+
+```sh
+sudo /usr/sbin/lumen-set-ip prepare portus0 192.168.1.30/26
+```
+
+From serial/local console, confirm with:
+
+```sh
+sudo /usr/sbin/lumen-set-ip confirm --console
+```
+
+The CIDR prefix is used by the boot script and converted to a dotted netmask
+in `/etc/network/interfaces` (`/26` becomes `255.255.255.192`). Prefixes `/1`
+through `/32` are supported; `/0` is rejected. The new IPv4 address must
+differ from the current one, and the interface must have exactly one current
+IPv4 address. The helper does not change gateways or DNS. Route changes can
+still interrupt SSH; serial console is the recovery path if the network does
+not recover. Timeout rollback errors are logged to syslog and
+`/run/lumen-set-ip.log`.
+
+The change survives reboot but not a reflash. For future images, also update
+`ETH_STATIC_IP` or `PORTUS_STATIC_IP` in
+`meta-lumen/recipes-core/network/lumen-eth-static.bb`.
 
 ---
 

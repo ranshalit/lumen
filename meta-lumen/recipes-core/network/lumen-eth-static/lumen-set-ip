@@ -1,0 +1,421 @@
+#!/bin/sh
+
+set -u
+umask 077
+set -f
+
+case "$0" in
+    /*) SCRIPT_PATH=$0 ;;
+    */*) SCRIPT_PATH=$(cd "${0%/*}" && pwd)/${0##*/} ;;
+    *) SCRIPT_PATH=$(command -v "$0") ;;
+esac
+
+if [ "$(id -u)" -eq 0 ]; then
+    INIT_FILE=/etc/init.d/lumen-eth-static
+    INTERFACES_FILE=/etc/network/interfaces
+    RUN_DIR=/run
+    TIMEOUT=120
+else
+    if [ -z "${LUMEN_SET_IP_TEST_ROOT:-}" ]; then
+        echo "lumen-set-ip: must run as root" >&2
+        exit 1
+    fi
+    INIT_FILE=$LUMEN_SET_IP_TEST_ROOT/etc/init.d/lumen-eth-static
+    INTERFACES_FILE=$LUMEN_SET_IP_TEST_ROOT/etc/network/interfaces
+    RUN_DIR=$LUMEN_SET_IP_TEST_ROOT/run
+    TIMEOUT=${LUMEN_SET_IP_TEST_TIMEOUT:-120}
+fi
+
+PENDING_FILE=$RUN_DIR/lumen-set-ip.pending
+LOCK_DIR=$RUN_DIR/lumen-set-ip.lock
+LOCK_HELD=no
+
+error() {
+    echo "lumen-set-ip: $*" >&2
+    exit 1
+}
+
+release_lock() {
+    if [ "$LOCK_HELD" = yes ]; then
+        owner=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+        if [ "$owner" = "$$" ]; then
+            rm -f "$LOCK_DIR/pid"
+            rmdir "$LOCK_DIR" 2>/dev/null || true
+        fi
+        LOCK_HELD=no
+    fi
+}
+
+acquire_lock() {
+    attempts=0
+    while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+        owner=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+        case "$owner" in
+            ''|*[!0-9]*)
+                attempts=$((attempts + 1))
+                if [ "$attempts" -gt 20 ]; then
+                    rmdir "$LOCK_DIR" 2>/dev/null || true
+                    attempts=0
+                fi
+                ;;
+            *)
+                if ! kill -0 "$owner" 2>/dev/null; then
+                    rm -f "$LOCK_DIR/pid"
+                    rmdir "$LOCK_DIR" 2>/dev/null || true
+                else
+                    attempts=$((attempts + 1))
+                    [ "$attempts" -lt 1200 ] || error "timed out waiting for another operation"
+                fi
+                ;;
+        esac
+        sleep 0.05
+    done
+    printf '%s\n' "$$" > "$LOCK_DIR/pid" || error "cannot record lock owner"
+    LOCK_HELD=yes
+    trap release_lock 0
+}
+
+validate_ipv4() {
+    address=$1
+    case "$address" in
+        ''|.*|*..*|*.|*[!0-9.]*)
+            return 1
+            ;;
+    esac
+
+    saved_ifs=$IFS
+    IFS=.
+    set -- $address
+    IFS=$saved_ifs
+    [ "$#" -eq 4 ] || return 1
+
+    for octet do
+        case "$octet" in
+            ''|*[!0-9]*|0[0-9]*)
+                return 1
+                ;;
+        esac
+        [ "$octet" -le 255 ] 2>/dev/null || return 1
+    done
+    return 0
+}
+
+parse_cidr() {
+    case "$1" in
+        */*/*|'') return 1 ;;
+        */*) ;;
+        *) return 1 ;;
+    esac
+
+    PARSED_IP=${1%/*}
+    PARSED_PREFIX=${1#*/}
+    case "$PARSED_PREFIX" in
+        ''|0*|*[!0-9]*) return 1 ;;
+    esac
+    [ "$PARSED_PREFIX" -le 32 ] 2>/dev/null || return 1
+    validate_ipv4 "$PARSED_IP" || return 1
+    PARSED_CIDR=$PARSED_IP/$PARSED_PREFIX
+    return 0
+}
+
+netmask_for_prefix() {
+    remaining=$1
+    mask=
+    octet_index=1
+    while [ "$octet_index" -le 4 ]; do
+        if [ "$remaining" -ge 8 ]; then
+            octet=255
+            remaining=$((remaining - 8))
+        elif [ "$remaining" -gt 0 ]; then
+            octet=0
+            bit=128
+            bit_index=0
+            while [ "$bit_index" -lt "$remaining" ]; do
+                octet=$((octet + bit))
+                bit=$((bit / 2))
+                bit_index=$((bit_index + 1))
+            done
+            remaining=0
+        else
+            octet=0
+        fi
+
+        if [ -z "$mask" ]; then
+            mask=$octet
+        else
+            mask=$mask.$octet
+        fi
+        octet_index=$((octet_index + 1))
+    done
+    printf '%s\n' "$mask"
+}
+
+load_pending() {
+    [ -f "$PENDING_FILE" ] || return 1
+    {
+        IFS= read -r P_IFACE
+        IFS= read -r P_OLD_CIDR
+        IFS= read -r P_NEW_CIDR
+        IFS= read -r P_NONCE
+    } < "$PENDING_FILE" || return 1
+    parse_cidr "$P_NEW_CIDR" || return 1
+    P_NEW_IP=$PARSED_IP
+    P_NEW_PREFIX=$PARSED_PREFIX
+    return 0
+}
+
+write_pending() {
+    pending_tmp=$PENDING_FILE.$$
+    if ! printf '%s\n%s\n%s\n%s\n' "$NEW_IFACE" "$OLD_CIDR" "$NEW_CIDR" "$NONCE" > "$pending_tmp"; then
+        rm -f "$pending_tmp"
+        error "cannot write pending transaction"
+    fi
+    if ! mv "$pending_tmp" "$PENDING_FILE"; then
+        rm -f "$pending_tmp"
+        error "cannot save pending transaction"
+    fi
+}
+
+current_cidr() {
+    iface=$1
+    output=$(ip addr show dev "$iface" 2>&1) || error "cannot inspect $iface: $output"
+    addresses=$(printf '%s\n' "$output" | sed -n 's/^[[:space:]]*inet \([^[:space:]]*\).*/\1/p')
+    count=0
+    for address in $addresses; do
+        CURRENT_CIDR=$address
+        count=$((count + 1))
+    done
+    [ "$count" -eq 1 ] || error "$iface must have exactly one current IPv4 address"
+}
+
+prepare_change() {
+    [ "$#" -eq 2 ] || error "usage: lumen-set-ip prepare <eth0|portus0> <IPv4/CIDR>"
+    NEW_IFACE=$1
+    case "$NEW_IFACE" in
+        eth0|portus0) ;;
+        *) error "unsupported interface: $NEW_IFACE" ;;
+    esac
+    parse_cidr "$2" || error "invalid IPv4/CIDR: $2"
+    NEW_CIDR=$PARSED_CIDR
+    NEW_IP=$PARSED_IP
+    NEW_PREFIX=$PARSED_PREFIX
+
+    case "$TIMEOUT" in
+        ''|0*|*[!0-9]*) error "invalid rollback timeout" ;;
+    esac
+    [ "$TIMEOUT" -le 3600 ] 2>/dev/null || error "rollback timeout exceeds 3600 seconds"
+
+    mkdir -p "$RUN_DIR" || error "cannot create runtime state directory"
+    acquire_lock
+    [ ! -e "$PENDING_FILE" ] || error "another IP change is already pending"
+    current_cidr "$NEW_IFACE"
+    OLD_CIDR=$CURRENT_CIDR
+    [ "${OLD_CIDR%/*}" != "$NEW_IP" ] || error "new IPv4 address must differ from the current address"
+
+    NONCE=$$.$(date +%s)
+    write_pending
+    if ! ip addr add "$NEW_CIDR" dev "$NEW_IFACE"; then
+        rm -f "$PENDING_FILE"
+        error "failed to stage $NEW_CIDR on $NEW_IFACE"
+    fi
+
+    (
+        trap '' HUP
+        elapsed=0
+        while [ "$elapsed" -lt "$TIMEOUT" ]; do
+            if ! load_pending || [ "$P_NONCE" != "$NONCE" ]; then
+                exit 0
+            fi
+            sleep 1
+            elapsed=$((elapsed + 1))
+        done
+        sh "$SCRIPT_PATH" rollback "$NONCE"
+    ) </dev/null >> "$RUN_DIR/lumen-set-ip.log" 2>&1 &
+
+    echo "Staged $NEW_CIDR on $NEW_IFACE; confirm from the new IP within $TIMEOUT seconds."
+}
+
+rewrite_init_file() {
+    temp_file=$INIT_FILE.lumen-set-ip.$$
+    if [ "$P_IFACE" = eth0 ]; then
+        if ! awk -v ip="$P_NEW_IP" -v prefix="$P_NEW_PREFIX" '
+            /^IP=/ { print "IP=" ip; ip_count++; next }
+            /^CIDR=/ { print "CIDR=" prefix; cidr_count++; next }
+            { print }
+            END { if (ip_count != 1 || cidr_count != 1) exit 1 }
+        ' "$INIT_FILE" > "$temp_file"; then
+            rm -f "$temp_file"
+            return 1
+        fi
+    else
+        if ! awk -v cidr="$P_NEW_CIDR" '
+            /ip addr replace [^ ]+ dev portus0/ {
+                sub(/ip addr replace [^ ]+ dev portus0/, "ip addr replace " cidr " dev portus0")
+                count++
+            }
+            { print }
+            END { if (count != 1) exit 1 }
+        ' "$INIT_FILE" > "$temp_file"; then
+            rm -f "$temp_file"
+            return 1
+        fi
+    fi
+    if ! chmod 0755 "$temp_file" || ! mv "$temp_file" "$INIT_FILE"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+    return 0
+}
+
+rewrite_interfaces_file() {
+    temp_file=$INTERFACES_FILE.lumen-set-ip.$$
+    netmask=$(netmask_for_prefix "$P_NEW_PREFIX")
+    if ! awk -v iface="$P_IFACE" -v ip="$P_NEW_IP" -v mask="$netmask" '
+        $0 == "iface " iface " inet static" { in_iface=1; print; next }
+        in_iface && /^iface / { in_iface=0 }
+        in_iface && /^[[:space:]]*address[[:space:]]/ {
+            print "    address " ip
+            address_count++
+            next
+        }
+        in_iface && /^[[:space:]]*netmask[[:space:]]/ {
+            print "    netmask " mask
+            netmask_count++
+            next
+        }
+        { print }
+        END { if (address_count != 1 || netmask_count != 1) exit 1 }
+    ' "$INTERFACES_FILE" > "$temp_file"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+    if ! chmod 0644 "$temp_file" || ! mv "$temp_file" "$INTERFACES_FILE"; then
+        rm -f "$temp_file"
+        return 1
+    fi
+    return 0
+}
+
+restore_config() {
+    backup_dir=$1
+    restore_failed=no
+    for name in init interfaces; do
+        case "$name" in
+            init) target=$INIT_FILE ;;
+            interfaces) target=$INTERFACES_FILE ;;
+        esac
+        temp_file=$target.lumen-set-ip-restore.$$
+        if cp -p "$backup_dir/$name" "$temp_file" && mv "$temp_file" "$target"; then
+            :
+        else
+            rm -f "$temp_file"
+            restore_failed=yes
+        fi
+    done
+    [ "$restore_failed" = no ]
+}
+
+confirm_change() {
+    console=no
+    if [ "$#" -eq 1 ] && [ "$1" = --console ]; then
+        console=yes
+    elif [ "$#" -ne 0 ]; then
+        error "usage: lumen-set-ip confirm [--console]"
+    fi
+
+    acquire_lock
+    load_pending || error "no valid pending IP change"
+    if [ "$console" = no ]; then
+        [ -n "${SSH_CONNECTION:-}" ] || error "SSH_CONNECTION is required; use confirm --console from serial"
+        set -- $SSH_CONNECTION
+        [ "$#" -eq 4 ] && [ "$3" = "$P_NEW_IP" ] || error "SSH session is not connected to staged address $P_NEW_IP"
+    fi
+
+    [ -f "$INIT_FILE" ] || error "missing $INIT_FILE"
+    [ -f "$INTERFACES_FILE" ] || error "missing $INTERFACES_FILE"
+    backup_dir=$RUN_DIR/lumen-set-ip-backup-$P_NONCE
+    mkdir "$backup_dir" || error "cannot create config backup"
+    if ! cp -p "$INIT_FILE" "$backup_dir/init" ||
+       ! cp -p "$INTERFACES_FILE" "$backup_dir/interfaces"; then
+        rm -f "$backup_dir/init" "$backup_dir/interfaces"
+        rmdir "$backup_dir" 2>/dev/null || true
+        error "cannot back up network configuration"
+    fi
+
+    if ! rewrite_init_file || ! rewrite_interfaces_file; then
+        if ! restore_config "$backup_dir"; then
+            error "config update failed and backup restore failed; inspect $backup_dir"
+        fi
+        rm -f "$backup_dir/init" "$backup_dir/interfaces"
+        rmdir "$backup_dir" 2>/dev/null || true
+        error "config update failed; original files restored"
+    fi
+
+    if ! rm -f "$PENDING_FILE"; then
+        if ! restore_config "$backup_dir"; then
+            error "cannot finalize transaction and config restore failed; inspect $backup_dir"
+        fi
+        error "cannot finalize transaction; original config restored"
+    fi
+    if ! ip addr del "$P_OLD_CIDR" dev "$P_IFACE"; then
+        rm -f "$backup_dir/init" "$backup_dir/interfaces"
+        rmdir "$backup_dir" 2>/dev/null || true
+        error "config saved, but failed to remove old address $P_OLD_CIDR from $P_IFACE"
+    fi
+    rm -f "$backup_dir/init" "$backup_dir/interfaces"
+    rmdir "$backup_dir" 2>/dev/null || true
+    echo "Updated $P_IFACE to $P_NEW_CIDR; reboot config saved."
+}
+
+cancel_change() {
+    [ "$#" -eq 0 ] || error "usage: lumen-set-ip cancel"
+    acquire_lock
+    load_pending || error "no valid pending IP change"
+    if ! ip addr del "$P_NEW_CIDR" dev "$P_IFACE"; then
+        error "failed to remove staged address $P_NEW_CIDR from $P_IFACE"
+    fi
+    rm -f "$PENDING_FILE" || error "address removed, but cannot clear pending transaction"
+    echo "Cancelled staged address on $P_IFACE."
+}
+
+rollback_change() {
+    [ "$#" -eq 1 ] || error "invalid rollback request"
+    nonce=$1
+    acquire_lock
+    if ! load_pending || [ "$P_NONCE" != "$nonce" ]; then
+        exit 0
+    fi
+    if ! ip addr del "$P_NEW_CIDR" dev "$P_IFACE"; then
+        if command -v logger >/dev/null 2>&1; then
+            logger -t lumen-set-ip "timeout rollback failed for $P_NEW_CIDR on $P_IFACE"
+        fi
+        error "timeout rollback failed for $P_NEW_CIDR on $P_IFACE"
+    fi
+    rm -f "$PENDING_FILE" || error "address removed, but cannot clear pending transaction"
+    if command -v logger >/dev/null 2>&1; then
+        logger -t lumen-set-ip "rolled back unconfirmed address on $P_IFACE"
+    fi
+}
+
+case "${1:-}" in
+    prepare)
+        shift
+        prepare_change "$@"
+        ;;
+    confirm)
+        shift
+        confirm_change "$@"
+        ;;
+    cancel)
+        shift
+        cancel_change "$@"
+        ;;
+    rollback)
+        shift
+        rollback_change "$@"
+        ;;
+    *)
+        echo "Usage: lumen-set-ip {prepare <eth0|portus0> <IPv4/CIDR>|confirm [--console]|cancel}" >&2
+        exit 2
+        ;;
+esac
