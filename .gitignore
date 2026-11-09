@@ -11,6 +11,9 @@ sstate-cache/
 *.swp
 *~
 
+# Local isolated worktrees
+.worktrees/
+
 # kas-cloned layers (local build only, not committed)
 poky/
 meta-openembedded/
