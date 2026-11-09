@@ -14,6 +14,7 @@ if [ "$(id -u)" -eq 0 ]; then
     INIT_FILE=/etc/init.d/lumen-eth-static
     INTERFACES_FILE=/etc/network/interfaces
     RUN_DIR=/run
+    SYSCTL_DIR=/proc/sys/net/ipv4/conf
     TIMEOUT=120
 else
     if [ -z "${LUMEN_SET_IP_TEST_ROOT:-}" ]; then
@@ -23,6 +24,7 @@ else
     INIT_FILE=$LUMEN_SET_IP_TEST_ROOT/etc/init.d/lumen-eth-static
     INTERFACES_FILE=$LUMEN_SET_IP_TEST_ROOT/etc/network/interfaces
     RUN_DIR=$LUMEN_SET_IP_TEST_ROOT/run
+    SYSCTL_DIR=$LUMEN_SET_IP_TEST_ROOT/proc/sys/net/ipv4/conf
     TIMEOUT=${LUMEN_SET_IP_TEST_TIMEOUT:-120}
 fi
 
@@ -315,6 +317,21 @@ restore_config() {
     [ "$restore_failed" = no ]
 }
 
+remove_old_address() {
+    promotion_file=$SYSCTL_DIR/$P_IFACE/promote_secondaries
+    previous_promotion=$(cat "$promotion_file") || return 1
+    case "$previous_promotion" in
+        0|1) ;;
+        *) return 1 ;;
+    esac
+    # Linux otherwise deletes same-subnet secondary addresses with the primary.
+    printf '1\n' > "$promotion_file" || return 1
+    removal_status=0
+    ip addr del "$P_OLD_CIDR" dev "$P_IFACE" || removal_status=1
+    printf '%s\n' "$previous_promotion" > "$promotion_file" || return 1
+    return "$removal_status"
+}
+
 confirm_change() {
     console=no
     if [ "$#" -eq 1 ] && [ "$1" = --console ]; then
@@ -357,10 +374,10 @@ confirm_change() {
         fi
         error "cannot finalize transaction; original config restored"
     fi
-    if ! ip addr del "$P_OLD_CIDR" dev "$P_IFACE"; then
+    if ! remove_old_address; then
         rm -f "$backup_dir/init" "$backup_dir/interfaces"
         rmdir "$backup_dir" 2>/dev/null || true
-        error "config saved, but failed to remove old address $P_OLD_CIDR from $P_IFACE"
+        error "config saved, but failed to finalize live address on $P_IFACE"
     fi
     rm -f "$backup_dir/init" "$backup_dir/interfaces"
     rmdir "$backup_dir" 2>/dev/null || true

@@ -17,8 +17,13 @@ class LumenSetIpTests(unittest.TestCase):
         self.network_dir = self.etc / "network"
         self.run_dir = self.root / "run"
         self.bin_dir = self.root / "bin"
+        self.sysctl_dir = self.root / "proc/sys/net/ipv4/conf"
         for directory in (self.init_dir, self.network_dir, self.run_dir, self.bin_dir):
             directory.mkdir(parents=True, exist_ok=True)
+        for interface in ("eth0", "portus0"):
+            directory = self.sysctl_dir / interface
+            directory.mkdir(parents=True)
+            (directory / "promote_secondaries").write_text("0\n")
 
         self.init_file = self.init_dir / "lumen-eth-static"
         self.interfaces_file = self.network_dir / "interfaces"
@@ -54,7 +59,7 @@ class LumenSetIpTests(unittest.TestCase):
         fake_ip = self.bin_dir / "ip"
         fake_ip.write_text(
             "#!/usr/bin/env python3\n"
-            "import json, os, sys, time\n"
+            "import ipaddress, json, os, sys, time\n"
             "from pathlib import Path\n"
             "state_path = Path(os.environ['FAKE_IP_STATE'])\n"
             "log_path = Path(os.environ['FAKE_IP_LOG'])\n"
@@ -76,11 +81,16 @@ class LumenSetIpTests(unittest.TestCase):
             "        entries.append(address)\n"
             "    else:\n"
             "        time.sleep(float(os.environ.get('FAKE_IP_DELAY_DELETE', '0')))\n"
+            "        primary = bool(entries and entries[0] == address)\n"
             "        try:\n"
             "            entries.remove(address)\n"
             "        except ValueError:\n"
             "            print('Address not found', file=sys.stderr)\n"
             "            sys.exit(2)\n"
+            "        promote = (Path(os.environ['FAKE_SYSCTL_DIR']) / iface / 'promote_secondaries').read_text().strip()\n"
+            "        if primary and promote == '0':\n"
+            "            network = ipaddress.IPv4Interface(address).network\n"
+            "            entries[:] = [entry for entry in entries if ipaddress.IPv4Interface(entry).network != network]\n"
             "    state_path.write_text(json.dumps(state))\n"
             "else:\n"
             "    print('unsupported ip invocation: ' + repr(args), file=sys.stderr)\n"
@@ -97,6 +107,7 @@ class LumenSetIpTests(unittest.TestCase):
             LUMEN_SET_IP_TEST_ROOT=str(self.root),
             FAKE_IP_STATE=str(self.ip_state),
             FAKE_IP_LOG=str(self.ip_log),
+            FAKE_SYSCTL_DIR=str(self.sysctl_dir),
         )
 
     def run_helper(
@@ -196,6 +207,20 @@ class LumenSetIpTests(unittest.TestCase):
         self.assertEqual(self.init_file.read_text(), original_init)
         self.assertEqual(self.interfaces_file.read_text(), original_interfaces)
         self.assertEqual(self.run_helper("cancel").returncode, 0)
+
+    def test_same_subnet_confirmation_preserves_new_live_address(self):
+        prepared = self.run_helper("prepare", "eth0", "192.0.5.20/24")
+        self.assertEqual(prepared.returncode, 0, prepared.stderr)
+
+        result = self.run_helper(
+            "confirm", ssh_connection="192.0.5.30 42000 192.0.5.20 22"
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.addresses("eth0"), ["192.0.5.20/24"])
+        self.assertEqual(
+            (self.sysctl_dir / "eth0/promote_secondaries").read_text(), "0\n"
+        )
 
     def test_console_confirmation_updates_portus_only(self):
         prepared = self.run_helper("prepare", "portus0", "192.168.1.30/26")
